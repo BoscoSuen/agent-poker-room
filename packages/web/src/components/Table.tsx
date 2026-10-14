@@ -33,22 +33,27 @@ function positions(v: View): Record<number, string> {
   order.forEach((idx, i) => { out[idx] = labels[i]; });
   return out;
 }
+// Portrait phones: a "stadium" layout, hero at the bottom, three seats up each side, two across the top.
+const MOBILE_POS = [[50, 86], [16, 73], [12, 52], [16, 31], [34, 12], [66, 12], [84, 31], [88, 52], [84, 73]];
 function seatPos(d: number, mobile: boolean) {
   // d = clockwise offset from the hero seat (hero at bottom center)
+  if (mobile) { const [x, y] = MOBILE_POS[d]; return { x, y }; }
   const a = (Math.PI / 2) + (d * 2 * Math.PI) / N;
-  const rx = mobile ? 41 : 44, ry = mobile ? 45 : 43;
-  return { x: 50 + rx * Math.cos(a), y: 50 + ry * Math.sin(a) };
+  return { x: 50 + 44 * Math.cos(a), y: 50 + 43 * Math.sin(a) };
 }
 
 export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
   const v = es.view!;
   const you = v.you;
-  const [mobile, setMobile] = useState(window.innerWidth <= 860);
-  useEffect(() => { const on = () => setMobile(window.innerWidth <= 860); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
+  const [mobile, setMobile] = useState(window.innerWidth <= 640);
+  useEffect(() => { const on = () => setMobile(window.innerWidth <= 640); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
   const [bbMode, setBbMode] = useState(false);
   const [join, setJoin] = useState<{ seat?: number } | null>(null);
   const [tab, setTab] = useState<'log' | 'chat' | 'board' | 'host'>(hostKey ? 'host' : 'log');
   const [collapsed, setCollapsed] = useState(true);
+  const seenChat = useRef(0);
+  useEffect(() => { if (!collapsed || tab === 'chat') seenChat.current = es.chat.length; }, [collapsed, es.chat.length, tab]);
+  const unread = Math.max(0, es.chat.length - seenChat.current);
   const fmt = (n: number) => bbMode ? (n / v.table.bigBlind).toFixed(n % v.table.bigBlind ? 1 : 0) + ' BB' : n.toLocaleString();
 
   // timer re-render
@@ -77,11 +82,11 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
     <div class="game">
       <div class="topbar">
         <a class="brand" href="/">♠ Poker <span>Garden</span></a>
-        <span class="status">{v.table.name} · {v.table.smallBlind}/{v.table.bigBlind}{v.table.ante ? ` ante ${v.table.ante}` : ''} · hand #{v.table.handNo}</span>
+        <span class="status">{mobile ? '' : `${v.table.name} · `}{v.table.smallBlind}/{v.table.bigBlind}{v.table.ante ? ` ante ${v.table.ante}` : ''} · #{v.table.handNo}</span>
         <div class="spacer" />
         <button style="padding:4px 8px;font-size:12px" onClick={() => setBbMode(!bbMode)} title="Toggle big-blind display (B)">{bbMode ? 'BB' : '$'}</button>
-        <button class="side-toggle" style="padding:4px 8px;font-size:12px" onClick={() => setCollapsed(!collapsed)}>{collapsed ? 'Panel' : 'Hide'}</button>
-        <span class={`status ${es.connected ? '' : 'bad'}`}>{es.connected ? '● live' : es.reconnecting ? '○ reconnecting…' : '○ offline'}</span>
+        <button class="side-toggle" style="padding:4px 8px;font-size:12px" onClick={() => setCollapsed(!collapsed)}>{collapsed ? `Panel${unread ? ` (${unread})` : ''}` : 'Hide'}</button>
+        <span class={`status conn ${es.connected ? '' : 'bad'}`} title={es.connected ? 'live' : 'reconnecting'}>{es.connected ? (mobile ? '●' : '● live') : es.reconnecting ? (mobile ? '○' : '○ reconnecting…') : '○ offline'}</span>
       </div>
       {!es.connected && es.reconnecting ? <div class="banner bad">Connection lost — reconnecting… your seat is kept.</div> : null}
       {v.table.status === 'closed' ? <div class="banner bad">Table closed by host.</div> : null}
@@ -117,7 +122,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
                   {bubbleFor(s.idx) ? <div class="bubble">{bubbleFor(s.idx)}</div> : null}
                   <div class="plate">
                     <div class="name">{s.name}{s.kind === 'bot' ? <span class="ptag">{s.persona}</span> : ''}</div>
-                    <div class="stack">{s.stack === 0 && s.inHand ? 'ALL-IN' : fmt(s.stack)}</div>
+                    <div class="stack">{s.stack === 0 && s.inHand ? 'ALL-IN' : fmt(s.stack)}{pos[s.idx] ? <span class="posi"> · {pos[s.idx]}</span> : null}</div>
                     {pos[s.idx] ? <div class="posn">({pos[s.idx]})</div> : null}
                     <div class="sub">{!s.connected && s.kind === 'human' ? <span class="dc">disconnected</span> : s.sittingOut ? 'sitting out' : winners.has(s.idx) && h?.done ? <span class="ok">+{fmt(winAmount(s.idx))}</span> : s.lastAction ? s.lastAction.replace(/(\d+)$/, (m) => fmt(Number(m))) : ''}</div>
                     {acting ? <div class={`timer ${bank ? 'bank' : ''}`}><i style={{ transform: `scaleX(${frac})` }} /></div> : null}
@@ -128,7 +133,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
             {v.seats.map((s) => {
               if (!s.name) return null;
               const p = seatPos(rot(s.idx), mobile);
-              const center = { x: 50, y: 44 };
+              const center = { x: 50, y: mobile ? 50 : 44 };
               const bp = { x: p.x + (center.x - p.x) * 0.42, y: p.y + (center.y - p.y) * 0.42 };
               const dp = { x: p.x + (center.x - p.x) * 0.3 + 5, y: p.y + (center.y - p.y) * 0.3 + 3 };
               return (<>
@@ -138,7 +143,8 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
             })}
           </div>
         </div>
-        <SidePanel tab={tab} setTab={setTab} collapsed={collapsed} v={v} es={es} client={client} hostKey={hostKey} gameId={gameId} api={api} fmt={fmt} />
+        {mobile && !collapsed ? <div class="sheet-bg" onClick={() => setCollapsed(true)} /> : null}
+        <SidePanel tab={tab} setTab={setTab} collapsed={collapsed} onClose={() => setCollapsed(true)} v={v} es={es} client={client} hostKey={hostKey} gameId={gameId} api={api} fmt={fmt} />
       </div>
       <ActionBar v={v} client={client} fmt={fmt} you={you} onSit={() => setJoin({})} onBb={() => setBbMode(!bbMode)} onLeave={() => { client.leave(); setTimeout(() => onToken(null), 400); }} />
       {join ? <JoinModal seat={join.seat} defaultStack={(v.table as any).defaultStack ?? v.table.bigBlind * 100} onClose={() => setJoin(null)} onJoin={doJoin} /> : null}
@@ -172,6 +178,11 @@ function ActionBar({ v, client, fmt, you, onSit, onBb, onLeave }: { v: View; cli
   const check = legal.find((l) => l.action === 'check');
   const [amt, setAmt] = useState(0);
   const [raising, setRaising] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  useEffect(() => { setConfirmLeave(false); }, [h?.decisionId, you]);
+  const leaveUI = confirmLeave
+    ? <span class="confirm">Leave the table{h && you !== null && v.seats[you].inHand && !v.seats[you].folded && !h.done ? ' (folds your hand)' : ''}? <button class="danger" onClick={() => { setConfirmLeave(false); onLeave(); }}>Yes, leave</button><button onClick={() => setConfirmLeave(false)}>Cancel</button></span>
+    : null;
   useEffect(() => { if (br) setAmt(br.min!); setRaising(false); }, [h?.decisionId]);
   const act = (a: any, amount?: number) => { if (h) client.act(a, amount, h.decisionId); };
   useEffect(() => {
@@ -196,7 +207,7 @@ function ActionBar({ v, client, fmt, you, onSit, onBb, onLeave }: { v: View; cli
       <span class="spacer" style="flex:1" />
       {me.stack === 0 && !(h && me.inHand && !h.done) ? <button class="primary" onClick={() => client.rebuy()}>Rebuy</button> : null}
       <button style="font-size:12px" onClick={() => client.sitOut(!me.sittingOut)}>{me.sittingOut ? 'I\'m back' : 'Sit out next hand'}</button>
-      <button class="danger" style="font-size:12px" onClick={onLeave}>Leave table</button>
+      {leaveUI ?? <button class="danger" style="font-size:12px" onClick={() => setConfirmLeave(true)}>Leave table</button>}
     </div></div>;
   }
   const toCall = call?.amount ?? 0;
@@ -217,8 +228,9 @@ function ActionBar({ v, client, fmt, you, onSit, onBb, onLeave }: { v: View; cli
           <input type="number" min={br.min} max={br.max} value={amt} ref={(el) => { if (el && document.activeElement !== el && !(document.activeElement instanceof HTMLInputElement)) { el.focus(); el.select(); } }} onInput={(e) => setAmt(Number((e.target as HTMLInputElement).value))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmRaise(); } }} />
         </div>
       ) : null}
+      {leaveUI ? <div class="idle">{leaveUI}</div> : null}
       <div class="btns">
-        <button class="leave" title="Fold and leave" onClick={onLeave}>Leave</button>
+        <button class="leave" title="Fold and leave" onClick={() => setConfirmLeave(true)}>Leave</button>
         <button class="fold" onClick={() => act('fold')}>Fold</button>
         {check ? <button class="call" onClick={() => act('check')}>Check</button> : <button class="call" onClick={() => act('call')}>Call {fmt(toCall)}{toCall >= me.stack ? ' (all-in)' : ''}</button>}
         {br ? (raising
@@ -229,7 +241,7 @@ function ActionBar({ v, client, fmt, you, onSit, onBb, onLeave }: { v: View; cli
   );
 }
 
-function SidePanel({ tab, setTab, collapsed, v, es, client, hostKey, gameId, api, fmt }: { tab: 'log' | 'chat' | 'board' | 'host'; setTab: (t: any) => void; collapsed: boolean; v: View; es: EngineState; client: EngineClient; hostKey: string | null; gameId: string; api: string; fmt: (n: number) => string }) {
+function SidePanel({ tab, setTab, collapsed, onClose, v, es, client, hostKey, gameId, api, fmt }: { tab: 'log' | 'chat' | 'board' | 'host'; setTab: (t: any) => void; collapsed: boolean; onClose: () => void; v: View; es: EngineState; client: EngineClient; hostKey: string | null; gameId: string; api: string; fmt: (n: number) => string }) {
   // keep a rolling log across hands
   const logRef = useRef<{ hand: number; lines: { t: string; cls?: string }[] }[]>([]);
   const h = v.hand;
@@ -269,6 +281,7 @@ function SidePanel({ tab, setTab, collapsed, v, es, client, hostKey, gameId, api
         <button class={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>Chat {es.chat.length ? `(${es.chat.length})` : ''}</button>
         <button class={tab === 'board' ? 'on' : ''} onClick={() => setTab('board')}>Board</button>
         {hostKey ? <button class={tab === 'host' ? 'on' : ''} onClick={() => setTab('host')}>Host</button> : null}
+        <button class="sheet-close" onClick={onClose} aria-label="Close panel">✕</button>
       </div>
       {tab === 'log' ? <div class="body log" ref={bodyRef}>{logRef.current.flatMap((x) => x.lines).map((l) => <div class={`line ${l.cls ?? ''}`}>{l.t}</div>)}{!h ? <div class="muted">No hand yet.</div> : null}</div> : null}
       {tab === 'chat' ? <>

@@ -4,6 +4,8 @@ import { appendJsonl, log } from './log.js';
 import { config } from './config.js';
 import { BOT_LIST } from './bots/names.js';
 
+const DISCONNECT_GRACE_MS = 30_000;
+
 export interface SeatToken { token: string; seatIdx: number; playerId: string; gameId: string; }
 export type ViewListener = (runtime: GameRuntime) => void;
 
@@ -50,9 +52,8 @@ export class GameRuntime {
     if (ev.type === 'hand_started') for (const i of ev.seats) { const p = this.table.seats[i].player; if (p) this.handsPlayed.set(p.id, (this.handsPlayed.get(p.id) ?? 0) + 1); }
     this.lastActivity = Date.now();
     if (ev.type === 'hand_ended') this.scheduleNextHand();
-    this.armTimer();
-    // notify after the engine finished the synchronous cascade; coalesce via microtask
-    queueMicrotask(() => this.notify());
+    // the engine may still be mid-cascade (actionOn/deadline change after this event); finish in a microtask
+    queueMicrotask(() => { this.armTimer(); this.armDisconnectGrace(); this.notify(); });
   }
 
   private settle(playerId: string, name: string, stack: number) {
@@ -177,9 +178,28 @@ export class GameRuntime {
     queueMicrotask(() => this.notify());
     this.maybeStartHand();
   }
+  private sockets = new Map<string, number>(); // token -> open sockets
   setConnected(token: string, connected: boolean) {
     const st = this.resolve(token);
-    if (st) { this.table.setConnected(st.seatIdx, connected); queueMicrotask(() => this.notify()); }
+    if (!st) return;
+    const n = Math.max(0, (this.sockets.get(token) ?? 0) + (connected ? 1 : -1));
+    this.sockets.set(token, n);
+    this.table.setConnected(st.seatIdx, n > 0);
+    queueMicrotask(() => this.notify());
+    this.armDisconnectGrace();
+  }
+  /** A disconnected human on action gets a grace period even when the table has no decision timer; then check/fold. */
+  private graceTimer: NodeJS.Timeout | null = null;
+  private armDisconnectGrace() {
+    if (this.graceTimer) { clearTimeout(this.graceTimer); this.graceTimer = null; }
+    const h = this.table.hand;
+    if (!h || h.actionOn === null || this.table.handDone) return;
+    const seat = this.table.seats[h.actionOn];
+    if (!seat.player || seat.player.kind !== 'human' || seat.connected || h.deadline !== null) return;
+    h.deadline = Date.now() + DISCONNECT_GRACE_MS;
+    h.usingTimeBank = true; // no further time bank on top
+    this.armTimer();
+    queueMicrotask(() => this.notify());
   }
 
   // ----- host controls -----
