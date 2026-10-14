@@ -1,0 +1,7 @@
+services:
+  pokerskill:
+    build: ./services/pokerskill
+    image: pokergarden-pokerskill
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8321:8321"

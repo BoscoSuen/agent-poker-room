@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Poker Garden
+node_modules/
+packages/*/dist/
+.wrangler/
+.dev.vars
+.env.local
+data/
+*.local.json

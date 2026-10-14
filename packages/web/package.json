@@ -1,0 +1,21 @@
+{
+  "name": "@pokergarden/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "wrangler pages dev dist --kv DB",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name pokergarden --commit-dirty=true"
+  },
+  "dependencies": {
+    "preact": "^10.25.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "@preact/preset-vite": "^2.9.3",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.5"
+  }
+}

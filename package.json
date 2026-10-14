@@ -1,0 +1,14 @@
+{
+  "name": "poker-garden",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "test": "npm run test -w packages/engine",
+    "server": "npm run dev -w packages/server",
+    "web": "npm run dev -w packages/web",
+    "build:web": "npm run build -w packages/web",
+    "deploy:web": "npm run build -w packages/web && wrangler pages deploy packages/web/dist --project-name pokergarden --commit-dirty=true"
+  },
+  "engines": { "node": ">=22" }
+}
