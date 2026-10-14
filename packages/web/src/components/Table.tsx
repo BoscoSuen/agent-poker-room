@@ -7,6 +7,13 @@ type Props = { client: EngineClient; es: EngineState; hostKey: string | null; ga
 
 const N = 9;
 
+const PERSONA_INFO: Record<string, { label: string; desc: string }> = {
+  default: { label: 'Default', desc: 'Solid tight-aggressive: opens good hands, respects position, value bets, bluffs selectively.' },
+  aggressive: { label: 'Aggressive', desc: 'Loose-aggressive: wide opens, frequent 3-bets and barrels, big sizes, extra random bluffs.' },
+  weak: { label: 'Weak', desc: 'Rule-based calling station: calls almost anything, rarely raises, no LLM.' },
+  gto: { label: 'GTO pro', desc: 'PokerSkill strategy prompts (heads-up approximation) plus the LLM; balanced, solver-style play.' },
+};
+
 /** Chip stack: discs colored by denomination (relative to the big blind), count grows with amount. */
 function Chips({ amount, bb, big }: { amount: number; bb: number; big?: boolean }) {
   const x = amount / Math.max(1, bb);
@@ -49,6 +56,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
   useEffect(() => { const on = () => setMobile(window.innerWidth <= 640); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
   const [bbMode, setBbMode] = useState(false);
   const [join, setJoin] = useState<{ seat?: number } | null>(null);
+  const [detail, setDetail] = useState<number | null>(null);
   const [tab, setTab] = useState<'log' | 'chat' | 'board' | 'host'>(hostKey ? 'host' : 'log');
   const [collapsed, setCollapsed] = useState(true);
   const seenChat = useRef(0);
@@ -120,8 +128,8 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
                 <div class={`seat ${s.folded ? 'folded' : ''} ${s.sittingOut || (!s.inHand && h) ? 'out' : ''} ${acting ? 'acting' : ''} ${isYou ? 'you' : ''} ${winners.has(s.idx) ? 'win' : ''}`} style={{ left: `${p.x}%`, top: `${p.y}%` }}>
                   <div class="cards">{showCards ? (s.holeCards ? s.holeCards.map((c) => <Card c={c} big={isYou && !mobile} />) : [<Card c={null} />, <Card c={null} />]) : null}</div>
                   {bubbleFor(s.idx) ? <div class="bubble">{bubbleFor(s.idx)}</div> : null}
-                  <div class="plate">
-                    <div class="name">{s.name}{s.kind === 'bot' ? <span class="ptag">{s.persona}</span> : ''}</div>
+                  <div class="plate" role="button" onClick={() => setDetail(detail === s.idx ? null : s.idx)}>
+                    <div class="name">{s.name}{s.kind === 'bot' ? <span class={`ptag p-${s.persona}`} title={s.persona}>{s.persona}</span> : ''}</div>
                     <div class="stack">{s.stack === 0 && s.inHand ? 'ALL-IN' : fmt(s.stack)}{pos[s.idx] ? <span class="posi"> · {pos[s.idx]}</span> : null}</div>
                     {pos[s.idx] ? <div class="posn">({pos[s.idx]})</div> : null}
                     <div class="sub">{!s.connected && s.kind === 'human' ? <span class="dc">disconnected</span> : s.sittingOut ? 'sitting out' : winners.has(s.idx) && h?.done ? <span class="ok">+{fmt(winAmount(s.idx))}</span> : s.lastAction ? s.lastAction.replace(/(\d+)$/, (m) => fmt(Number(m))) : ''}</div>
@@ -147,6 +155,20 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
         <SidePanel tab={tab} setTab={setTab} collapsed={collapsed} onClose={() => setCollapsed(true)} v={v} es={es} client={client} hostKey={hostKey} gameId={gameId} api={api} fmt={fmt} />
       </div>
       <ActionBar v={v} client={client} fmt={fmt} you={you} onSit={() => setJoin({})} onBb={() => setBbMode(!bbMode)} onLeave={() => { client.leave(); setTimeout(() => onToken(null), 400); }} />
+      {detail !== null && v.seats[detail].name ? (() => {
+        const s = v.seats[detail]; const row = es.leaderboard.find((r) => r.name === s.name); const pi = s.persona ? PERSONA_INFO[s.persona] : null;
+        return <div class="modal-bg" onClick={() => setDetail(null)}><div class="modal detail" onClick={(e) => e.stopPropagation()}>
+          <h3>{s.name} <span class="muted" style="font-weight:400;font-size:13px">{s.kind === 'bot' ? '🤖 agent' : '👤 human'}{s.idx === you ? ' · you' : ''}</span></h3>
+          {pi ? <p><span class={`ptag big p-${s.persona}`}>{pi.label}</span><br /><span class="muted" style="font-size:13px">{pi.desc}</span></p> : null}
+          <table class="kv"><tbody>
+            <tr><td>Seat</td><td class="mono">{s.idx + 1}{pos[s.idx] ? ` · ${pos[s.idx]}` : ''}</td></tr>
+            <tr><td>Stack</td><td class="mono">{fmt(s.stack)}{s.streetBet ? ` (+${fmt(s.streetBet)} in)` : ''}</td></tr>
+            {row ? <tr><td>Session</td><td class="mono"><span class={row.net > 0 ? 'ok' : row.net < 0 ? 'neg' : ''}>{row.net > 0 ? '+' : ''}{fmt(row.net)}</span> · {row.wins} wins · {row.sessions} sit{row.sessions === 1 ? '' : 's'}</td></tr> : null}
+            <tr><td>Status</td><td>{s.sittingOut ? 'sitting out' : h && s.inHand ? (s.folded ? 'folded' : s.allIn ? 'all-in' : 'in hand') : 'waiting for next hand'}{s.kind === 'human' && !s.connected ? ' · disconnected' : ''}</td></tr>
+          </tbody></table>
+          <div class="row" style="justify-content:flex-end"><button onClick={() => setDetail(null)}>Close</button></div>
+        </div></div>;
+      })() : null}
       {join ? <JoinModal seat={join.seat} defaultStack={(v.table as any).defaultStack ?? v.table.bigBlind * 100} onClose={() => setJoin(null)} onJoin={doJoin} /> : null}
     </div>
   );
@@ -320,7 +342,7 @@ function HostPanel({ v, hostKey, gameId, api }: { v: View; hostKey: string; game
         <button onClick={() => call('add_bot', { persona })}>Add</button>
       </div></div>
       <div class="sec"><h4>Seats</h4>
-        {v.seats.filter((s) => s.name).map((s) => <div class="seatrow"><span>{s.idx + 1}. {s.name}{s.persona ? <span class="ptag">{s.persona}</span> : null} <span class="muted mono">{s.stack}</span></span><span class="row" style="gap:4px"><button style="padding:2px 6px;font-size:11px" onClick={() => call('add_chips', { seat: s.idx, amount: v.table.bigBlind * 100 })}>+{v.table.bigBlind * 100}</button><button style="padding:2px 6px;font-size:11px" class="danger" onClick={() => call('kick', { seat: s.idx })}>kick</button></span></div>)}
+        {v.seats.filter((s) => s.name).map((s) => <div class="seatrow"><span>{s.idx + 1}. {s.name}{s.persona ? <span class={`ptag p-${s.persona}`} title={s.persona}>{s.persona}</span> : null} <span class="muted mono">{s.stack}</span></span><span class="row" style="gap:4px"><button style="padding:2px 6px;font-size:11px" onClick={() => call('add_chips', { seat: s.idx, amount: v.table.bigBlind * 100 })}>+{v.table.bigBlind * 100}</button><button style="padding:2px 6px;font-size:11px" class="danger" onClick={() => call('kick', { seat: s.idx })}>kick</button></span></div>)}
       </div>
       {err ? <div class="err">{err}</div> : null}
     </div>
