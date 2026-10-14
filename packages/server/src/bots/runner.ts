@@ -60,8 +60,8 @@ export class BotRunner {
     } finally { clearTimeout(timer); }
     if (!d) { d = await weakAgent.decide(view, ctrl.signal); d.source = 'fallback:weak'; }
     const elapsed = Date.now() - t0;
-    // make rule bots feel human: minimum think time
-    const minThink = persona === 'weak' ? config.botThinkMs : 0;
+    // pace every agent: act no sooner than BOT_THINK_MS after its turn began (LLM latency counts toward it)
+    const minThink = config.botThinkMs;
     if (elapsed < minThink) await new Promise((r) => setTimeout(r, minThink - elapsed));
     stats.decisions++; if (fallback) stats.fallbacks++; stats.latencies.push(Date.now() - t0);
     appendJsonl(`bots-${this.rt.id}.jsonl`, { ts: Date.now(), seat: seatIdx, persona, decisionId, hand: view.hand?.no, street: view.hand?.street, decision: d, ms: Date.now() - t0, fallback });

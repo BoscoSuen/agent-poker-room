@@ -20,7 +20,9 @@ export function startLobbySync() {
       if (res.ok) {
         const list: any[] = await res.json();
         for (const g of list) {
-          if (games.has(g.id)) continue;
+          const existing = games.get(g.id);
+          if (existing && !existing.rt.closed) continue;
+          if (existing) games.delete(g.id);
           log('lobby', `claiming game ${g.id}`);
           try {
             const game = await createGame(g.config ?? {}, { id: g.id, ownerEmail: g.owner ?? null });

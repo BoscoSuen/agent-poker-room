@@ -70,6 +70,19 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
   // re-render while chat bubbles are fading
   useEffect(() => { const t = setInterval(() => force((x) => x + 1), 1000); const stop = setTimeout(() => clearInterval(t), 9000); return () => { clearInterval(t); clearTimeout(stop); }; }, [es.chat.length]);
   const pos = positions(v);
+  // action flash: latest history entry -> 1.2 s highlight on that seat (chip slide + label)
+  const lastAct = v.hand?.history[v.hand.history.length - 1];
+  const [flash, setFlash] = useState<{ seat: number; action: string; to: number; key: string } | null>(null);
+  useEffect(() => {
+    const hh = v.hand;
+    if (!hh || !lastAct || lastAct.action === 'sb' || lastAct.action === 'bb' || lastAct.action === 'ante') return;
+    const key = `${hh.no}:${hh.history.length}`;
+    setFlash({ seat: lastAct.seat, action: lastAct.action, to: lastAct.to ?? lastAct.amount, key });
+    const t = setTimeout(() => setFlash((f) => (f?.key === key ? null : f)), 1200);
+    return () => clearTimeout(t);
+  }, [v.hand?.no, v.hand?.history.length]);
+  const feltRef = useRef<HTMLDivElement>(null);
+  const ACT_LABEL: Record<string, string> = { fold: 'FOLD', check: 'CHECK', call: 'CALL', bet: 'BET', raise: 'RAISE', timeout: 'TIME' };
   const bubbleFor = (idx: number) => { const m = [...es.chat].reverse().find((c) => c.seat === idx); return m && Date.now() - m.ts < 7000 ? m.text : null; };
 
   const hero = you ?? 0;
@@ -78,9 +91,13 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
   const h = v.hand;
   const winners = new Set<number>(h?.done ? (h.results ?? []).flatMap((r) => r.winners.map((w) => w.seat)) : []);
   const winAmount = (idx: number) => (h?.results ?? []).flatMap((r) => r.winners).filter((w) => w.seat === idx).reduce((a, w) => a + w.amount, 0);
+  const winHand = (idx: number) => (h?.results ?? []).flatMap((r) => r.winners).find((w) => w.seat === idx && w.hand)?.hand;
+  const winCards = new Set<string>(h?.done ? (h.results ?? []).flatMap((r) => r.winners.flatMap((w) => w.cards ?? [])) : []);
+  const hl = (c: string) => winCards.size ? (winCards.has(c) ? 'hl' : 'dim') : '';
+  const winSummary = h?.done && h.results ? [...winners].map((idx) => `${v.seats[idx].name} wins ${fmt(winAmount(idx))}${winHand(idx) ? ` (${winHand(idx)})` : ''}`).join(' · ') : '';
 
   const doJoin = async (name: string, stack: number, seat?: number) => {
-    const r = await engineJoin(api, gameId, name, stack, seat);
+    const r = await engineJoin(api, gameId, name, stack || undefined, seat);
     try { localStorage.setItem('pg:name', name); } catch { /* ignore */ }
     onToken(r.token);
     setJoin(null);
@@ -102,12 +119,12 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
       {v.table.running && !h && v.seats.filter((s) => s.name && s.stack > 0 && !s.sittingOut).length < 2 ? <div class="banner">Waiting for at least two players with chips.</div> : null}
       <div class="game-main">
         <div class="felt-wrap">
-          <div class="felt">
+          <div class="felt" ref={feltRef}>
             <div class="oval" data-label="Poker Garden" />
             <div class="center">
-              <div class="board">{(h?.board ?? []).map((c) => <Card c={c} big />)}</div>
+              <div class="board">{(h?.board ?? []).map((c) => <Card c={c} big cls={hl(c)} />)}</div>
               {h ? <div class="potwrap">{h.pot > 0 ? <><Chips amount={h.pot} bb={v.table.bigBlind} big /><Chips amount={h.pot / 3} bb={v.table.bigBlind} big /></> : null}<div class="pot"><small>POT</small>{fmt(h.pot)}</div></div> : <div class="handinfo">{v.table.running ? 'next hand starting…' : 'table idle'}</div>}
-              {h ? <div class="handinfo">{h.street}{h.done && h.results ? ` · ${h.results.map((r) => r.winners.map((w) => `${v.seats[w.seat].name} wins ${fmt(w.amount)}${w.hand ? ' (' + w.hand + ')' : ''}`).join(', ')).join(' · ')}` : ''}</div> : null}
+              {h ? <div class="handinfo">{h.street}{winSummary ? ` · ${winSummary}` : ''}</div> : null}
             </div>
             {v.seats.map((s) => {
               const d = rot(s.idx);
@@ -125,9 +142,11 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
               const isYou = s.idx === you;
               const showCards = s.inHand && !s.folded;
               return (
-                <div class={`seat ${s.folded ? 'folded' : ''} ${s.sittingOut || (!s.inHand && h) ? 'out' : ''} ${acting ? 'acting' : ''} ${isYou ? 'you' : ''} ${winners.has(s.idx) ? 'win' : ''}`} style={{ left: `${p.x}%`, top: `${p.y}%` }}>
+                <div class={`seat ${s.folded ? 'folded' : ''} ${s.sittingOut || (!s.inHand && h) ? 'out' : ''} ${acting ? 'acting' : ''} ${isYou ? 'you' : ''} ${winners.has(s.idx) ? 'win' : ''} ${flash?.seat === s.idx ? `flash flash-${flash.action}` : ''}`} style={{ left: `${p.x}%`, top: `${p.y}%` }}>
                   <div class="cards">{showCards ? (s.holeCards ? s.holeCards.map((c) => <Card c={c} big={isYou && !mobile} />) : [<Card c={null} />, <Card c={null} />]) : null}</div>
-                  {bubbleFor(s.idx) ? <div class="bubble">{bubbleFor(s.idx)}</div> : null}
+                  {winners.has(s.idx) && h?.done ? <div class="winbadge">🏆 +{fmt(winAmount(s.idx))}{winHand(s.idx) ? ` · ${winHand(s.idx)}` : ''}</div>
+                    : flash?.seat === s.idx ? <div class={`actpop act-${flash.action}`} key={flash.key}>{ACT_LABEL[flash.action] ?? flash.action}{flash.action === 'bet' || flash.action === 'raise' ? ` ${fmt(flash.to)}` : ''}</div>
+                    : bubbleFor(s.idx) ? <div class="bubble">{bubbleFor(s.idx)}</div> : null}
                   <div class="plate" role="button" onClick={() => setDetail(detail === s.idx ? null : s.idx)}>
                     <div class="name">{s.name}{s.kind === 'bot' ? <span class={`ptag p-${s.persona}`} title={s.persona}>{s.persona}</span> : ''}</div>
                     <div class="stack">{s.stack === 0 && s.inHand ? 'ALL-IN' : fmt(s.stack)}{pos[s.idx] ? <span class="posi"> · {pos[s.idx]}</span> : null}</div>
@@ -145,7 +164,12 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
               const bp = { x: p.x + (center.x - p.x) * 0.42, y: p.y + (center.y - p.y) * 0.42 };
               const dp = { x: p.x + (center.x - p.x) * 0.3 + 5, y: p.y + (center.y - p.y) * 0.3 + 3 };
               return (<>
-                {s.streetBet > 0 ? <div class="chip" style={{ left: `${bp.x}%`, top: `${bp.y}%` }}><Chips amount={s.streetBet} bb={v.table.bigBlind} />{fmt(s.streetBet)}</div> : null}
+                {s.streetBet > 0 ? (() => {
+                  const sliding = flash?.seat === s.idx && (flash.action === 'bet' || flash.action === 'raise' || flash.action === 'call');
+                  const fw = feltRef.current?.clientWidth ?? 0, fh = feltRef.current?.clientHeight ?? 0;
+                  const st = sliding ? { '--dx': `${((p.x - bp.x) / 100) * fw}px`, '--dy': `${((p.y - bp.y) / 100) * fh}px` } as any : {};
+                  return <div class={`chip ${sliding ? 'slide' : ''}`} key={sliding ? flash!.key : 'chip'} style={{ left: `${bp.x}%`, top: `${bp.y}%`, ...st }}><Chips amount={s.streetBet} bb={v.table.bigBlind} />{fmt(s.streetBet)}</div>;
+                })() : null}
                 {s.isDealer ? <div class="dbtn" style={{ left: `${dp.x}%`, top: `${dp.y}%` }}>D</div> : null}
               </>);
             })}
@@ -166,7 +190,9 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
             {row ? <tr><td>Session</td><td class="mono"><span class={row.net > 0 ? 'ok' : row.net < 0 ? 'neg' : ''}>{row.net > 0 ? '+' : ''}{fmt(row.net)}</span> · {row.wins} wins · {row.sessions} sit{row.sessions === 1 ? '' : 's'}</td></tr> : null}
             <tr><td>Status</td><td>{s.sittingOut ? 'sitting out' : h && s.inHand ? (s.folded ? 'folded' : s.allIn ? 'all-in' : 'in hand') : 'waiting for next hand'}{s.kind === 'human' && !s.connected ? ' · disconnected' : ''}</td></tr>
           </tbody></table>
-          <div class="row" style="justify-content:flex-end"><button onClick={() => setDetail(null)}>Close</button></div>
+          <div class="row" style="justify-content:flex-end">
+            {s.kind === 'human' && !s.connected && you === null ? <button class="primary" onClick={async () => { try { await doJoin(s.name!, 0, undefined); setDetail(null); } catch (e: any) { alert(e.message); } }}>This is me — reclaim seat</button> : null}
+            <button onClick={() => setDetail(null)}>Close</button></div>
         </div></div>;
       })() : null}
       {join ? <JoinModal seat={join.seat} defaultStack={(v.table as any).defaultStack ?? v.table.bigBlind * 100} onClose={() => setJoin(null)} onJoin={doJoin} /> : null}
@@ -181,6 +207,7 @@ function JoinModal({ seat, defaultStack, onClose, onJoin }: { seat?: number; def
     <div class="modal-bg" onClick={onClose}>
       <div class="modal" onClick={(e) => e.stopPropagation()}>
         <h3>Take {seat !== undefined ? `seat ${seat + 1}` : 'a seat'}</h3>
+        <p class="muted" style="font-size:12px;margin-top:-6px">Use the same nickname as before to get your old seat back if it shows as disconnected.</p>
         <form onSubmit={async (e) => { e.preventDefault(); setBusy(true); setErr(''); try { await onJoin(name.trim() || 'Player', stack, seat); } catch (e: any) { setErr(e.message); setBusy(false); } }}>
           <div class="field"><label>Nickname</label><input value={name} onInput={(e) => setName((e.target as HTMLInputElement).value)} maxLength={20} autofocus /></div>
           <div class="field"><label>Stack</label><input type="number" min={1} value={stack} onInput={(e) => setStack(Number((e.target as HTMLInputElement).value))} /></div>

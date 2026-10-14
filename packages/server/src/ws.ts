@@ -16,6 +16,7 @@ export function attachWebSocket(server: Server) {
     wss.handleUpgrade(req, socket, head, (ws) => {
       const token = url.searchParams.get('token');
       const st = token ? game.rt.resolve(token) : undefined;
+      if (token && !st) log('ws', `rejected unknown seat token for game ${game.rt.id}`);
       const client: Client = { ws, rt: game.rt, token: st ? token : null, seatIdx: st ? st.seatIdx : null, lastSent: '', alive: true };
       if (client.token) game.rt.setConnected(client.token, true);
       serve(client);

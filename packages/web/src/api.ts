@@ -15,5 +15,6 @@ export const api = {
   createGame: (config: any) => req<{ id: string }>('/api/games', { method: 'POST', body: JSON.stringify({ config }) }),
   myGames: () => req<GameInfo[]>('/api/games'),
   game: (id: string) => req<GameInfo>(`/api/games/${id}`),
+  reopenGame: (id: string) => req(`/api/games/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'reopen' }) }),
   closeGame: (id: string) => req(`/api/games/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'closed' }) }),
 };

@@ -20,7 +20,25 @@ export function Home() {
       <div class="home">
         <h1>Poker Garden</h1>
         <p class="muted">7–9 player No-Limit Hold'em with friends and AI agents at one table. Got an invite link? Just open it.</p>
-        {email === undefined ? <p class="muted">…</p> : email ? <Host email={email} /> : <Login onLogin={setEmail} />}
+        {email === undefined ? <p class="muted">…</p> : email ? <Host email={email} /> : <><JoinTable /><h2>Host</h2><Login onLogin={setEmail} /></>}
+      </div>
+    </>
+  );
+}
+
+function JoinTable() {
+  const [val, setVal] = useState(''); const [err, setErr] = useState('');
+  const parse = (x: string) => { const m = x.trim().match(/\/g\/([a-z0-9]{6,})/i) ?? x.trim().match(/^([a-z0-9]{6,})$/i); return m ? m[1].toLowerCase() : null; };
+  const go = () => { const id = parse(val); if (!id) { setErr('Paste an invite link or a table id.'); return; } navigate(`/g/${id}`); };
+  return (
+    <>
+      <h2>Join table</h2>
+      <div class="card">
+        <form class="row" onSubmit={(e) => { e.preventDefault(); go(); }}>
+          <input style="flex:1;min-width:200px" placeholder="Invite link or table id" value={val} onInput={(e) => { setVal((e.target as HTMLInputElement).value); setErr(''); }} inputMode="url" autocapitalize="off" autocorrect="off" />
+          <button class="primary" type="submit">Join</button>
+        </form>
+        {err ? <div class="err">{err}</div> : null}
       </div>
     </>
   );
@@ -73,12 +91,17 @@ function Host({ email }: { email: string }) {
       <h2>My tables</h2>
       <div class="gamelist">
         {games.length === 0 ? <p class="muted">No tables yet.</p> : games.map((g) => (
-          <div class="item">
-            <div><b>{g.config?.name ?? g.id}</b> <span class="muted mono">{g.id}</span><br /><span class="muted" style="font-size:12px">{g.summary ? `hand #${g.summary.handNo} · ${g.summary.players} players (${g.summary.humans} human)` : new Date(g.createdAt).toLocaleString()}</span></div>
-            <div class="row"><span class={`tag ${g.status}`}>{g.status}</span>{g.status !== 'closed' ? <a href={`/g/${g.id}`} onClick={(e) => { e.preventDefault(); navigate(`/g/${g.id}`); }}>open</a> : null}</div>
+          <div class={`item ${g.status === 'closed' ? 'closed' : ''}`}>
+            <div><b>{g.config?.name ?? g.id}</b> <span class="muted mono">{g.id}</span><br /><span class="muted" style="font-size:12px">{g.status === 'closed' ? `closed · ${new Date(g.createdAt).toLocaleString()}` : g.summary ? `hand #${g.summary.handNo} · ${g.summary.players} players (${g.summary.humans} human)` : new Date(g.createdAt).toLocaleString()}</span></div>
+            <div class="row">
+              {g.status === 'closed'
+                ? <button disabled={busy} onClick={async () => { setBusy(true); try { await api.reopenGame(g.id); navigate(`/g/${g.id}`); } catch (e: any) { setErr(e.message); setBusy(false); } }}>Reopen</button>
+                : <><span class={`tag ${g.status}`}>{g.status}</span><a href={`/g/${g.id}`} onClick={(e) => { e.preventDefault(); navigate(`/g/${g.id}`); }}>open</a></>}
+            </div>
           </div>
         ))}
       </div>
+      <JoinTable />
       <h2>New table</h2>
       <div class="card">
         <div class="field"><label>Table name</label><input value={cfg.name} onInput={(e) => set('name', (e.target as HTMLInputElement).value)} /></div>

@@ -4,7 +4,8 @@ import { appendJsonl, log } from './log.js';
 import { config } from './config.js';
 import { BOT_LIST } from './bots/names.js';
 
-const DISCONNECT_GRACE_MS = 30_000;
+const DISCONNECT_GRACE_MS = 3_000;   // disconnected human on action: auto check/fold after 3 s
+const DISCONNECT_KICK_HANDS = 10;   // ...and after 10 such hands the seat is freed
 const BOT_DEADLINE_MS = 10_000; // agents always get at most 10 s, even when the table has no decision timer
 
 export interface SeatToken { token: string; seatIdx: number; playerId: string; gameId: string; }
@@ -48,6 +49,20 @@ export class GameRuntime {
   private handleEvent(ev: TableEvent) {
     appendJsonl(`game-${this.id}.jsonl`, { ts: Date.now(), ...ev });
     if (ev.type === 'seat_left') this.settle(ev.player.id, ev.player.name, ev.stack);
+    if (ev.type === 'action' && ev.timeout) {
+      const seat = this.table.seats[ev.seat];
+      if (seat.player?.kind === 'human' && !seat.connected) {
+        const rec = this.autoHands.get(seat.player.id) ?? { count: 0, lastHand: 0 };
+        const no = this.table.hand?.no ?? 0;
+        if (rec.lastHand !== no) { rec.count++; rec.lastHand = no; }
+        this.autoHands.set(seat.player.id, rec);
+        if (rec.count >= DISCONNECT_KICK_HANDS) {
+          log('runtime', `kicking ${seat.player.name}: disconnected for ${rec.count} hands`);
+          this.say('系统', null, `${seat.player.name} 断线超过 ${DISCONNECT_KICK_HANDS} 手，已请离座。`);
+          queueMicrotask(() => this.kick(seat.idx));
+        }
+      }
+    }
     if (ev.type === 'pot_awarded') { const p = this.table.seats[ev.seat].player; if (p) this.wonThisHand.add(p.id); }
     if (ev.type === 'hand_ended') { for (const id of this.wonThisHand) this.wins.set(id, (this.wins.get(id) ?? 0) + 1); this.wonThisHand.clear(); }
     if (ev.type === 'hand_started') for (const i of ev.seats) { const p = this.table.seats[i].player; if (p) this.handsPlayed.set(p.id, (this.handsPlayed.get(p.id) ?? 0) + 1); }
@@ -83,7 +98,20 @@ export class GameRuntime {
   recentChat(n = 50) { return this.chat.slice(-n); }
 
   // ----- seating -----
+  /** Lost your token (new device, cleared storage)? A disconnected human seat with the same nickname can be reclaimed: old token revoked, new one issued. */
+  reclaim(name: string): SeatToken | null {
+    const seat = this.table.seats.find((s) => s.player?.kind === 'human' && s.player.name === name && !s.connected);
+    if (!seat || !seat.player) return null;
+    for (const [k, v] of this.tokens) if (v.seatIdx === seat.idx && v.playerId === seat.player.id) { this.tokens.delete(k); this.sockets.delete(k); }
+    const token = randomBytes(32).toString('hex');
+    const st: SeatToken = { token, seatIdx: seat.idx, playerId: seat.player.id, gameId: this.id };
+    this.tokens.set(token, st);
+    this.autoHands.delete(seat.player.id);
+    log('runtime', `seat ${seat.idx} (${name}) reclaimed`);
+    return st;
+  }
   join(name: string, stack?: number, kind: 'human' | 'bot' = 'human', persona?: Persona, seatIdx?: number): SeatToken {
+    if (kind === 'human') { const re = this.reclaim(name.slice(0, 20)); if (re) return re; }
     const player: Player = { id: randomBytes(8).toString('hex'), name: name.slice(0, 20) || 'Player', kind, persona };
     const seat = this.table.takeSeat(player, stack ?? this.table.config.defaultStack, seatIdx);
     this.buyIn.set(player.id, seat.stack); this.handsPlayed.set(player.id, 0);
@@ -180,12 +208,14 @@ export class GameRuntime {
     this.maybeStartHand();
   }
   private sockets = new Map<string, number>(); // token -> open sockets
+  private autoHands = new Map<string, { count: number; lastHand: number }>(); // playerId -> hands auto-folded while disconnected
   setConnected(token: string, connected: boolean) {
     const st = this.resolve(token);
     if (!st) return;
     const n = Math.max(0, (this.sockets.get(token) ?? 0) + (connected ? 1 : -1));
     this.sockets.set(token, n);
     this.table.setConnected(st.seatIdx, n > 0);
+    if (n > 0) this.autoHands.delete(st.playerId);
     queueMicrotask(() => this.notify());
     this.armDisconnectGrace();
   }

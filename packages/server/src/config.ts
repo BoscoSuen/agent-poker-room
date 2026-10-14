@@ -26,5 +26,5 @@ export const config = {
   },
   adminKey: env.ADMIN_KEY ?? '',
   publicUrl: env.PUBLIC_URL ?? '', // if set, used instead of a tunnel (e.g. local dev)
-  botThinkMs: Number(env.BOT_THINK_MS ?? 600),
+  botThinkMs: Number(env.BOT_THINK_MS ?? 1500),
 };
