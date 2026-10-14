@@ -70,6 +70,15 @@ function Host({ email }: { email: string }) {
   };
   return (
     <>
+      <h2>My tables</h2>
+      <div class="gamelist">
+        {games.length === 0 ? <p class="muted">No tables yet.</p> : games.map((g) => (
+          <div class="item">
+            <div><b>{g.config?.name ?? g.id}</b> <span class="muted mono">{g.id}</span><br /><span class="muted" style="font-size:12px">{g.summary ? `hand #${g.summary.handNo} · ${g.summary.players} players (${g.summary.humans} human)` : new Date(g.createdAt).toLocaleString()}</span></div>
+            <div class="row"><span class={`tag ${g.status}`}>{g.status}</span>{g.status !== 'closed' ? <a href={`/g/${g.id}`} onClick={(e) => { e.preventDefault(); navigate(`/g/${g.id}`); }}>open</a> : null}</div>
+          </div>
+        ))}
+      </div>
       <h2>New table</h2>
       <div class="card">
         <div class="field"><label>Table name</label><input value={cfg.name} onInput={(e) => set('name', (e.target as HTMLInputElement).value)} /></div>
@@ -90,15 +99,6 @@ function Host({ email }: { email: string }) {
         </div>
         {err ? <div class="err">{err}</div> : null}
         <button class="primary" disabled={busy || cfg.botPersonas.length === 0} onClick={create}>{busy ? 'Creating…' : 'Create table'}</button>
-      </div>
-      <h2>My tables</h2>
-      <div class="gamelist">
-        {games.length === 0 ? <p class="muted">No tables yet.</p> : games.map((g) => (
-          <div class="item">
-            <div><b>{g.config?.name ?? g.id}</b> <span class="muted mono">{g.id}</span><br /><span class="muted" style="font-size:12px">{g.summary ? `hand #${g.summary.handNo} · ${g.summary.players} players (${g.summary.humans} human)` : new Date(g.createdAt).toLocaleString()}</span></div>
-            <div class="row"><span class={`tag ${g.status}`}>{g.status}</span>{g.status !== 'closed' ? <a href={`/g/${g.id}`} onClick={(e) => { e.preventDefault(); navigate(`/g/${g.id}`); }}>open</a> : null}</div>
-          </div>
-        ))}
       </div>
     </>
   );

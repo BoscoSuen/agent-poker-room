@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { BOT_LIST } from './bots/names.js';
 
 const DISCONNECT_GRACE_MS = 30_000;
+const BOT_DEADLINE_MS = 10_000; // agents always get at most 10 s, even when the table has no decision timer
 
 export interface SeatToken { token: string; seatIdx: number; playerId: string; gameId: string; }
 export type ViewListener = (runtime: GameRuntime) => void;
@@ -53,7 +54,7 @@ export class GameRuntime {
     this.lastActivity = Date.now();
     if (ev.type === 'hand_ended') this.scheduleNextHand();
     // the engine may still be mid-cascade (actionOn/deadline change after this event); finish in a microtask
-    queueMicrotask(() => { this.armTimer(); this.armDisconnectGrace(); this.notify(); });
+    queueMicrotask(() => { this.armTimer(); this.armBotDeadline(); this.armDisconnectGrace(); this.notify(); });
   }
 
   private settle(playerId: string, name: string, stack: number) {
@@ -187,6 +188,15 @@ export class GameRuntime {
     this.table.setConnected(st.seatIdx, n > 0);
     queueMicrotask(() => this.notify());
     this.armDisconnectGrace();
+  }
+  /** Agents never block the table: 10 s hard cap regardless of the table timer, then check/fold. */
+  private armBotDeadline() {
+    const h = this.table.hand;
+    if (!h || h.actionOn === null || this.table.handDone) return;
+    const seat = this.table.seats[h.actionOn];
+    if (!seat.player || seat.player.kind !== 'bot') return;
+    const cap = Date.now() + BOT_DEADLINE_MS;
+    if (h.deadline === null || h.deadline > cap) { h.deadline = cap; h.usingTimeBank = true; this.armTimer(); }
   }
   /** A disconnected human on action gets a grace period even when the table has no decision timer; then check/fold. */
   private graceTimer: NodeJS.Timeout | null = null;
