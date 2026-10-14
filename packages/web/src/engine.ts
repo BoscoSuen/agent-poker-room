@@ -53,6 +53,11 @@ export async function engineJoin(api: string, gameId: string, name: string, stac
   if (!res.ok) throw new Error(data.message ?? data.error ?? 'join failed');
   return data;
 }
+export async function engineLeave(api: string, gameId: string, token: string): Promise<void> {
+  const res = await fetch(`${api}/games/${gameId}/leave`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }), keepalive: true });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message ?? data.error ?? 'leave failed');
+}
 export async function engineInfo(api: string, gameId: string, hostKey?: string | null) {
   const res = await fetch(`${api}/games/${gameId}`, { headers: hostKey ? { 'x-host-key': hostKey } : {} });
   if (!res.ok) throw new Error(`engine ${res.status}`);

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { View } from '@pokergarden/engine';
-import { EngineClient, engineJoin, hostCall, type EngineState } from '../engine';
+import { EngineClient, engineJoin, engineLeave, hostCall, type EngineState } from '../engine';
 import { Card } from './Card';
 
 type Props = { client: EngineClient; es: EngineState; hostKey: string | null; gameId: string; api: string; onToken: (t: string | null) => void };
@@ -96,6 +96,16 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
   const hl = (c: string) => winCards.size ? (winCards.has(c) ? 'hl' : 'dim') : '';
   const winSummary = h?.done && h.results ? [...winners].map((idx) => `${v.seats[idx].name} wins ${fmt(winAmount(idx))}${winHand(idx) ? ` (${winHand(idx)})` : ''}`).join(' · ') : '';
 
+  const [leaveErr, setLeaveErr] = useState('');
+  const doLeave = async () => {
+    if (!client.token) return;
+    setLeaveErr('');
+    try { await engineLeave(api, gameId, client.token); onToken(null); }
+    catch (e: any) {
+      // token already invalid (engine restarted / seat reclaimed): just drop it; otherwise keep the seat and tell the user
+      if (/token/i.test(String(e.message))) onToken(null); else setLeaveErr(`Could not leave: ${e.message}. Check your connection and try again.`);
+    }
+  };
   const doJoin = async (name: string, stack: number, seat?: number) => {
     const r = await engineJoin(api, gameId, name, stack || undefined, seat);
     try { localStorage.setItem('pg:name', name); } catch { /* ignore */ }
@@ -109,12 +119,14 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
         <a class="brand" href="/">♠ Poker <span>Garden</span></a>
         <span class="status">{mobile ? '' : `${v.table.name} · `}{v.table.smallBlind}/{v.table.bigBlind}{v.table.ante ? ` ante ${v.table.ante}` : ''} · #{v.table.handNo}</span>
         <div class="spacer" />
+        <button class="iconbtn" onClick={() => location.reload()} title="Reload" aria-label="Reload"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" /></svg></button>
         <button style="padding:4px 8px;font-size:12px" onClick={() => setBbMode(!bbMode)} title="Toggle big-blind display (B)">{bbMode ? 'BB' : '$'}</button>
         <button class="side-toggle" style="padding:4px 8px;font-size:12px" onClick={() => setCollapsed(!collapsed)}>{collapsed ? `Panel${unread ? ` (${unread})` : ''}` : 'Hide'}</button>
         <span class={`status conn ${es.connected ? '' : 'bad'}`} title={es.connected ? 'live' : 'reconnecting'}>{es.connected ? (mobile ? '●' : '● live') : es.reconnecting ? (mobile ? '○' : '○ reconnecting…') : '○ offline'}</span>
       </div>
       {!es.connected && es.reconnecting ? <div class="banner bad">Connection lost — reconnecting… your seat is kept.</div> : null}
       {v.table.status === 'closed' ? <div class="banner bad">Table closed by host.</div> : null}
+      {leaveErr ? <div class="banner bad">{leaveErr}</div> : null}
       {v.table.status !== 'closed' && !v.table.running ? <div class="banner">Waiting for the host to start the game{hostKey ? ' — use the Host tab' : ''}.</div> : null}
       {v.table.running && !h && v.seats.filter((s) => s.name && s.stack > 0 && !s.sittingOut).length < 2 ? <div class="banner">Waiting for at least two players with chips.</div> : null}
       <div class="game-main">
@@ -178,7 +190,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
         {mobile && !collapsed ? <div class="sheet-bg" onClick={() => setCollapsed(true)} /> : null}
         <SidePanel tab={tab} setTab={setTab} collapsed={collapsed} onClose={() => setCollapsed(true)} v={v} es={es} client={client} hostKey={hostKey} gameId={gameId} api={api} fmt={fmt} />
       </div>
-      <ActionBar v={v} client={client} fmt={fmt} you={you} onSit={() => setJoin({})} onBb={() => setBbMode(!bbMode)} onLeave={() => { client.leave(); setTimeout(() => onToken(null), 400); }} />
+      <ActionBar v={v} client={client} fmt={fmt} you={you} onSit={() => setJoin({})} onBb={() => setBbMode(!bbMode)} onLeave={doLeave} />
       {detail !== null && v.seats[detail].name ? (() => {
         const s = v.seats[detail]; const row = es.leaderboard.find((r) => r.name === s.name); const pi = s.persona ? PERSONA_INFO[s.persona] : null;
         return <div class="modal-bg" onClick={() => setDetail(null)}><div class="modal detail" onClick={(e) => e.stopPropagation()}>
@@ -274,7 +286,7 @@ function ActionBar({ v, client, fmt, you, onSit, onBb, onLeave }: { v: View; cli
           <button onClick={() => setAmt(preset(1))}>Pot</button>
           <button onClick={() => setAmt(br.max!)}>All-in</button>
           <input type="range" min={br.min} max={br.max} step={1} value={amt} onInput={(e) => setAmt(Number((e.target as HTMLInputElement).value))} onKeyDown={(e) => { if (e.key === 'Enter') confirmRaise(); }} />
-          <input type="number" min={br.min} max={br.max} value={amt} ref={(el) => { if (el && document.activeElement !== el && !(document.activeElement instanceof HTMLInputElement)) { el.focus(); el.select(); } }} onInput={(e) => setAmt(Number((e.target as HTMLInputElement).value))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmRaise(); } }} />
+          <input type="number" min={br.min} max={br.max} value={amt} inputMode="numeric" ref={(el) => { if (el && !('ontouchstart' in window) && document.activeElement !== el && !(document.activeElement instanceof HTMLInputElement)) { el.focus(); el.select(); } }} onInput={(e) => setAmt(Number((e.target as HTMLInputElement).value))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmRaise(); } }} />
         </div>
       ) : null}
       {leaveUI ? <div class="idle">{leaveUI}</div> : null}
@@ -319,6 +331,21 @@ function SidePanel({ tab, setTab, collapsed, onClose, v, es, client, hostKey, ga
     const last = cur[cur.length - 1];
     if (last && last.hand === h.no) last.lines = lines; else { cur.push({ hand: h.no, lines }); if (cur.length > 20) cur.shift(); }
   }, [lines]);
+  const [copied, setCopied] = useState(false);
+  const copyHand = async () => {
+    if (!h) return;
+    const me = v.you !== null ? v.seats[v.you] : null;
+    const head = [
+      `Poker Garden · ${v.table.name} · ${v.table.smallBlind}/${v.table.bigBlind} NLH · Hand #${h.no}`,
+      `Players: ${v.seats.filter((s) => s.inHand).map((s) => `${s.name} (${fmt(s.stack + s.handBet)}${s.isDealer ? ', BTN' : s.isSB ? ', SB' : s.isBB ? ', BB' : ''})`).join(', ')}`,
+      me?.holeCards ? `My hand (${me.name}): ${me.holeCards.join(' ')}` : '',
+      h.board.length ? `Board: ${h.board.join(' ')}` : '',
+      '',
+    ].filter((x) => x !== undefined);
+    const text = [...head, ...lines.map((l) => l.t)].join('\n');
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); setCopied(true); setTimeout(() => setCopied(false), 1500); } finally { ta.remove(); } }
+  };
   const bodyRef = useRef<HTMLDivElement>(null);
   useEffect(() => { const el = bodyRef.current; if (el) el.scrollTop = el.scrollHeight; }, [lines, es.chat.length, tab]);
   const [text, setText] = useState('');
@@ -332,7 +359,10 @@ function SidePanel({ tab, setTab, collapsed, onClose, v, es, client, hostKey, ga
         {hostKey ? <button class={tab === 'host' ? 'on' : ''} onClick={() => setTab('host')}>Host</button> : null}
         <button class="sheet-close" onClick={onClose} aria-label="Close panel">✕</button>
       </div>
-      {tab === 'log' ? <div class="body log" ref={bodyRef}>{logRef.current.flatMap((x) => x.lines).map((l) => <div class={`line ${l.cls ?? ''}`}>{l.t}</div>)}{!h ? <div class="muted">No hand yet.</div> : null}</div> : null}
+      {tab === 'log' ? <div class="body log" ref={bodyRef}>
+        {h ? <div class="logtools"><button onClick={copyHand}>{copied ? '✓ Copied' : 'Copy this hand'}</button></div> : null}
+        {logRef.current.flatMap((x) => x.lines).map((l) => <div class={`line ${l.cls ?? ''}`}>{l.t}</div>)}{!h ? <div class="muted">No hand yet.</div> : null}
+      </div> : null}
       {tab === 'chat' ? <>
         <div class="body chat" ref={bodyRef}>{es.chat.map((m) => <div class={`msg ${m.channel}`}><b>{m.from}</b> {m.text}</div>)}{es.error ? <div class="err">{es.error}</div> : null}</div>
         <form class="chat" style="display:flex" onSubmit={(e) => { e.preventDefault(); if (text.trim()) client.chat(text.trim()); setText(''); }}><input value={text} onInput={(e) => setText((e.target as HTMLInputElement).value)} placeholder="Say something…" maxLength={500} /><button type="submit">Send</button></form>

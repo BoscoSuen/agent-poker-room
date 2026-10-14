@@ -1,4 +1,4 @@
-import { type Env, json, readSession, getGame, putGame, publicGame, engineOk, removePendingIds, addPendingId } from '../../_lib';
+import { type Env, json, readSession, getGame, putGame, publicGame, engineOk, removePendingIds, addPendingId, removeOwnerId } from '../../_lib';
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env, params }) => {
   const g = await getGame(env, String(params.id));
@@ -35,4 +35,18 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
     return json({ ok: true });
   }
   return json({ error: 'forbidden' }, 403);
+};
+
+/** Owner deletes a closed table from their list. */
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params }) => {
+  const id = String(params.id);
+  const g = await getGame(env, id);
+  const s = await readSession(env, request);
+  if (!s) return json({ error: 'unauthorized' }, 401);
+  if (g && g.owner !== s.email) return json({ error: 'forbidden' }, 403);
+  if (g && g.status !== 'closed' && g.status !== 'error') return json({ error: 'not_closed', message: 'Close the table first.' }, 400);
+  await env.DB.delete(`game:${id}`);
+  await removeOwnerId(env, s.email, id);
+  await removePendingIds(env, [id]);
+  return json({ ok: true });
 };

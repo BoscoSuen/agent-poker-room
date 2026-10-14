@@ -78,6 +78,7 @@ function Host({ email }: { email: string }) {
   const [games, setGames] = useState<GameInfo[]>([]);
   const [cfg, setCfg] = useState({ name: `${email.split('@')[0]}'s table`, smallBlind: 10, bigBlind: 20, defaultStack: 2000, timerEnabled: true, decisionSec: 20, timeBankSec: 30, autoFillTo: 7, showdownSec: 5, botPersonas: ['default', 'aggressive', 'weak', 'gto'] as string[] });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const refresh = () => api.myGames().then(setGames).catch(() => {});
   useEffect(() => { refresh(); const t = setInterval(refresh, 5000); return () => clearInterval(t); }, []);
   const set = (k: string, v: any) => setCfg({ ...cfg, [k]: v });
@@ -93,10 +94,15 @@ function Host({ email }: { email: string }) {
         {games.length === 0 ? <p class="muted">No tables yet.</p> : games.map((g) => (
           <div class={`item ${g.status === 'closed' ? 'closed' : ''}`}>
             <div><b>{g.config?.name ?? g.id}</b> <span class="muted mono">{g.id}</span><br /><span class="muted" style="font-size:12px">{g.status === 'closed' ? `closed · ${new Date(g.createdAt).toLocaleString()}` : g.summary ? `hand #${g.summary.handNo} · ${g.summary.players} players (${g.summary.humans} human)` : new Date(g.createdAt).toLocaleString()}</span></div>
-            <div class="row">
+            <div class="actions">
               {g.status === 'closed'
-                ? <button disabled={busy} onClick={async () => { setBusy(true); try { await api.reopenGame(g.id); navigate(`/g/${g.id}`); } catch (e: any) { setErr(e.message); setBusy(false); } }}>Reopen</button>
-                : <><span class={`tag ${g.status}`}>{g.status}</span><a href={`/g/${g.id}`} onClick={(e) => { e.preventDefault(); navigate(`/g/${g.id}`); }}>open</a></>}
+                ? <>
+                    <button disabled={busy} onClick={async () => { setBusy(true); try { await api.reopenGame(g.id); navigate(`/g/${g.id}`); } catch (e: any) { setErr(e.message); setBusy(false); } }}>Reopen</button>
+                    {confirmDel === g.id
+                      ? <><button class="danger" disabled={busy} onClick={async () => { setBusy(true); try { await api.deleteGame(g.id); setGames(games.filter((x) => x.id !== g.id)); } catch (e: any) { setErr(e.message); } finally { setBusy(false); setConfirmDel(null); } }}>Yes, delete</button><button onClick={() => setConfirmDel(null)}>Cancel</button></>
+                      : <button class="danger" disabled={busy} onClick={() => setConfirmDel(g.id)}>Delete</button>}
+                  </>
+                : <><span class={`tag ${g.status}`}>{g.status}</span><button class="primary" onClick={() => navigate(`/g/${g.id}`)}>Open</button></>}
             </div>
           </div>
         ))}

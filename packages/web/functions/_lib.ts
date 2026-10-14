@@ -77,3 +77,4 @@ export const addPendingId = async (env: Env, id: string) => { const ids = await 
 export const removePendingIds = async (env: Env, rm: string[]) => { const ids = await getPendingIds(env); const next = ids.filter((x) => !rm.includes(x)); if (next.length !== ids.length) await setIds(env, 'pending', next, 3600); };
 export const getOwnerIds = (env: Env, email: string) => getIds(env, `owner:${email}`);
 export const addOwnerId = async (env: Env, email: string, id: string) => { const ids = await getOwnerIds(env, email); await setIds(env, `owner:${email}`, [...ids.filter((x) => x !== id), id]); };
+export const removeOwnerId = async (env: Env, email: string, id: string) => { const ids = await getOwnerIds(env, email); if (ids.includes(id)) await setIds(env, `owner:${email}`, ids.filter((x) => x !== id)); };

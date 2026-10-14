@@ -71,7 +71,7 @@ export function Game({ id }: { id: string }) {
 function Msg({ title, text, spinner }: { title?: string; text: string; spinner?: boolean }) {
   return (
     <>
-      <div class="topbar"><a class="brand" href="/">♠ Poker <span>Garden</span></a></div>
+      <div class="topbar"><a class="brand" href="/">♠ Poker <span>Garden</span></a><div class="spacer" /><button class="iconbtn" onClick={() => location.reload()} title="Reload" aria-label="Reload"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" /></svg></button></div>
       <div class="center-msg">{spinner ? <div class="spinner" /> : null}{title ? <h2 style="margin:0">{title}</h2> : null}<p>{text}</p><a href="/">← Home</a></div>
     </>
   );

@@ -44,6 +44,17 @@ app.post('/games/:id/join', async (c) => {
   } catch (e: any) { return c.json({ error: e.code ?? 'error', message: e.message }, 400); }
 });
 
+/** Leave over HTTP so it works even when the websocket is mid-reconnect (iOS backgrounding). */
+app.post('/games/:id/leave', async (c) => {
+  const g = getGame(c.req.param('id'));
+  if (!g) return c.json({ error: 'not_found' }, 404);
+  const body = await c.req.json().catch(() => ({}));
+  const token = String(body.token ?? '');
+  if (!g.rt.resolve(token)) return c.json({ error: 'bad_token', message: 'seat token not recognised' }, 400);
+  g.rt.leave(token);
+  return c.json({ ok: true });
+});
+
 app.get('/games/:id/view', (c) => {
   const g = getGame(c.req.param('id'));
   if (!g) return c.json({ error: 'not_found' }, 404);
