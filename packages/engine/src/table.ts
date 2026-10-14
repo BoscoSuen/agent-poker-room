@@ -279,7 +279,7 @@ export class Table {
     const hand = this.hand!;
     hand.actionOn = seatIdx;
     hand.decisionId = randomBytes(6).toString('hex');
-    hand.deadline = this.now() + this.config.decisionMs;
+    hand.deadline = this.config.decisionMs > 0 ? this.now() + this.config.decisionMs : null; // 0 = no timer, wait forever
     hand.usingTimeBank = false;
   }
 

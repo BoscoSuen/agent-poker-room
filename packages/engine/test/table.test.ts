@@ -230,3 +230,14 @@ describe('leaves during random play conserve chips', () => {
     }
   });
 });
+
+describe('no decision timer', () => {
+  it('decisionMs = 0 means no deadline and tick never auto-acts', () => {
+    const t = new Table({ decisionMs: 0, timeBankMs: 30000 }, { rng: () => 0 });
+    for (let i = 0; i < 3; i++) t.takeSeat(p(i), 1000, i);
+    t.startHand();
+    expect(t.hand!.deadline).toBeNull();
+    expect(t.tick(Date.now() + 10 * 60 * 60 * 1000)).toBe(false);
+    expect(t.hand!.actionOn).not.toBeNull();
+  });
+});

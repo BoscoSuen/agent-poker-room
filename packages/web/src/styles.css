@@ -174,3 +174,6 @@ label { display: block; font-size: 12px; color: var(--fg2); margin-bottom: 4px; 
 .lb th, .lb td { padding: 5px 4px; border-bottom: 1px dotted var(--line); text-align: left; }
 .lb th { color: var(--fg2); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .lb .r { text-align: right; } .lb .pos { color: #bff3d9; } .lb .neg { color: #ffb3b0; } .lb tr.seated td { color: var(--fg); }
+
+.switch { display: flex; align-items: center; gap: 8px; text-transform: none; font-size: 14px; color: var(--fg); cursor: pointer; }
+.switch input { width: auto; accent-color: var(--gold); }

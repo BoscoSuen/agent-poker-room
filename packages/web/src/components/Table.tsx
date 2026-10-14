@@ -302,7 +302,7 @@ function HostPanel({ v, hostKey, gameId, api }: { v: View; hostKey: string; game
       </div></div>
       <div class="sec"><h4>Add agent</h4><div class="row">
         <select style="width:auto" value={persona} onChange={(e) => setPersona((e.target as HTMLSelectElement).value)}>
-          <option value="default">Default (TAG)</option><option value="aggressive">Aggressive (LAG)</option><option value="weak">Weak (calling station)</option><option value="gto">GTO pro</option>
+          <option value="default">Default</option><option value="aggressive">Aggressive</option><option value="weak">Weak</option><option value="gto">GTO pro</option>
         </select>
         <button onClick={() => call('add_bot', { persona })}>Add</button>
       </div></div>

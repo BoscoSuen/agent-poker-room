@@ -3,8 +3,8 @@ import { api, type GameInfo } from '../api';
 import { navigate } from '../main';
 
 const PERSONAS = [
-  { id: 'default', label: 'Default (TAG)' }, { id: 'aggressive', label: 'Aggressive (LAG)' },
-  { id: 'weak', label: 'Weak (calling station)' }, { id: 'gto', label: 'GTO pro' },
+  { id: 'default', label: 'Default' }, { id: 'aggressive', label: 'Aggressive' },
+  { id: 'weak', label: 'Weak' }, { id: 'gto', label: 'GTO pro' },
 ];
 
 export function Home() {
@@ -48,7 +48,7 @@ function Login({ onLogin }: { onLogin: (e: string) => void }) {
 
 function Host({ email }: { email: string }) {
   const [games, setGames] = useState<GameInfo[]>([]);
-  const [cfg, setCfg] = useState({ name: `${email.split('@')[0]}'s table`, smallBlind: 10, bigBlind: 20, defaultStack: 2000, decisionSec: 20, timeBankSec: 30, autoFillTo: 7, showdownSec: 5, botPersonas: ['default', 'aggressive', 'weak', 'gto'] as string[] });
+  const [cfg, setCfg] = useState({ name: `${email.split('@')[0]}'s table`, smallBlind: 10, bigBlind: 20, defaultStack: 2000, timerEnabled: true, decisionSec: 20, timeBankSec: 30, autoFillTo: 7, showdownSec: 5, botPersonas: ['default', 'aggressive', 'weak', 'gto'] as string[] });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const refresh = () => api.myGames().then(setGames).catch(() => {});
   useEffect(() => { refresh(); const t = setInterval(refresh, 5000); return () => clearInterval(t); }, []);
@@ -67,8 +67,11 @@ function Host({ email }: { email: string }) {
           <div class="field"><label>Small blind</label><input type="number" min={1} value={cfg.smallBlind} onInput={num('smallBlind')} /></div>
           <div class="field"><label>Big blind</label><input type="number" min={1} value={cfg.bigBlind} onInput={num('bigBlind')} /></div>
           <div class="field"><label>Starting stack</label><input type="number" min={1} value={cfg.defaultStack} onInput={num('defaultStack')} /></div>
-          <div class="field"><label>Decision time (s)</label><input type="number" min={5} max={120} value={cfg.decisionSec} onInput={num('decisionSec')} /></div>
-          <div class="field"><label>Time bank (s)</label><input type="number" min={0} max={300} value={cfg.timeBankSec} onInput={num('timeBankSec')} /></div>
+          <div class="field"><label>Decision timer</label>
+            <div class="row" style="gap:8px"><label class="switch"><input type="checkbox" checked={cfg.timerEnabled} onChange={(e) => set('timerEnabled', (e.target as HTMLInputElement).checked)} /> {cfg.timerEnabled ? 'On' : 'Off (wait forever)'}</label></div>
+          </div>
+          <div class="field"><label>Decision time (s)</label><input type="number" min={5} max={600} value={cfg.decisionSec} disabled={!cfg.timerEnabled} onInput={num('decisionSec')} /></div>
+          <div class="field"><label>Time bank (s)</label><input type="number" min={0} max={300} value={cfg.timeBankSec} disabled={!cfg.timerEnabled} onInput={num('timeBankSec')} /></div>
           <div class="field"><label>Fill with agents up to</label><input type="number" min={2} max={9} value={cfg.autoFillTo} onInput={num('autoFillTo')} /></div>
           <div class="field"><label>Showdown pause (s)</label><input type="number" min={1} max={30} value={cfg.showdownSec} onInput={num('showdownSec')} /></div>
         </div>

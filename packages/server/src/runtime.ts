@@ -255,7 +255,7 @@ export function parseTableConfig(input: any): Partial<TableConfig> {
   out.bigBlind = num(input?.bigBlind, out.smallBlind * 2, out.smallBlind, 2_000_000);
   out.ante = num(input?.ante, 0, 0, out.bigBlind);
   out.defaultStack = num(input?.defaultStack, out.bigBlind * 100, out.bigBlind, out.bigBlind * 100_000);
-  out.decisionMs = num(input?.decisionSec, 20, 5, 120) * 1000;
+  out.decisionMs = input?.timerEnabled === false ? 0 : num(input?.decisionSec, 20, 5, 600) * 1000; // 0 = no decision timer
   out.timeBankMs = num(input?.timeBankSec, 30, 0, 300) * 1000;
   out.autoFillTo = num(input?.autoFillTo, 7, 2, 9);
   out.maxSeats = num(input?.maxSeats, 9, 2, 9);
