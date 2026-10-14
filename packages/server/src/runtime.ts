@@ -2,17 +2,10 @@ import { randomBytes } from 'node:crypto';
 import { Table, viewFor, EngineError, type TableConfig, type TableEvent, type Player, type ActionType, type Persona, type View } from '@pokergarden/engine';
 import { appendJsonl, log } from './log.js';
 import { config } from './config.js';
+import { BOT_LIST } from './bots/names.js';
 
 export interface SeatToken { token: string; seatIdx: number; playerId: string; gameId: string; }
 export type ViewListener = (runtime: GameRuntime) => void;
-
-let botSerial = 0;
-const BOT_NAMES: Record<Persona, string[]> = {
-  default: ['Ada', 'Turing', 'Lovelace', 'Hopper', 'Dijkstra'],
-  aggressive: ['Maverick', 'Blaze', 'Rocket', 'Viper', 'Storm'],
-  weak: ['Fishy', 'Calvin', 'Bubbles', 'Nemo', 'Dory'],
-  gto: ['Solver', 'Nash', 'Pio', 'Monker', 'Wizard'],
-};
 
 /**
  * One table + its side effects: timers, auto next-hand, seat tokens, event log, listeners.
@@ -30,6 +23,12 @@ export class GameRuntime {
   private nextHandTimer: NodeJS.Timeout | null = null;
   private listeners = new Set<ViewListener>();
   private chat: { from: string; seat: number | null; text: string; ts: number; channel: 'table' | 'commentary' }[] = [];
+  /** Per-name results across seatings at this table. Settled on leave; live rows computed from current seats. */
+  leaderboard = new Map<string, { net: number; sessions: number; hands: number; wins: number }>();
+  private wins = new Map<string, number>();         // playerId -> hands won
+  private wonThisHand = new Set<string>();
+  private buyIn = new Map<string, number>();   // playerId -> total chips bought in
+  private handsPlayed = new Map<string, number>();
   closed = false;
   onClose: (() => void) | null = null;
 
@@ -45,11 +44,36 @@ export class GameRuntime {
 
   private handleEvent(ev: TableEvent) {
     appendJsonl(`game-${this.id}.jsonl`, { ts: Date.now(), ...ev });
+    if (ev.type === 'seat_left') this.settle(ev.player.id, ev.player.name, ev.stack);
+    if (ev.type === 'pot_awarded') { const p = this.table.seats[ev.seat].player; if (p) this.wonThisHand.add(p.id); }
+    if (ev.type === 'hand_ended') { for (const id of this.wonThisHand) this.wins.set(id, (this.wins.get(id) ?? 0) + 1); this.wonThisHand.clear(); }
+    if (ev.type === 'hand_started') for (const i of ev.seats) { const p = this.table.seats[i].player; if (p) this.handsPlayed.set(p.id, (this.handsPlayed.get(p.id) ?? 0) + 1); }
     this.lastActivity = Date.now();
     if (ev.type === 'hand_ended') this.scheduleNextHand();
     this.armTimer();
     // notify after the engine finished the synchronous cascade; coalesce via microtask
     queueMicrotask(() => this.notify());
+  }
+
+  private settle(playerId: string, name: string, stack: number) {
+    const net = stack - (this.buyIn.get(playerId) ?? 0);
+    const row = this.leaderboard.get(name) ?? { net: 0, sessions: 0, hands: 0, wins: 0 };
+    row.net += net; row.sessions += 1; row.hands += this.handsPlayed.get(playerId) ?? 0; row.wins += this.wins.get(playerId) ?? 0;
+    this.leaderboard.set(name, row);
+    this.buyIn.delete(playerId); this.handsPlayed.delete(playerId); this.wins.delete(playerId);
+  }
+  /** Settled rows plus live rows for players currently seated (same name accumulates). */
+  leaderboardRows() {
+    const rows = new Map<string, { name: string; net: number; sessions: number; hands: number; wins: number; seated: boolean; kind?: string }>();
+    for (const [name, r] of this.leaderboard) rows.set(name, { name, ...r, seated: false });
+    for (const s of this.table.seats) {
+      if (!s.player) continue;
+      const live = s.stack + s.handBet - (this.buyIn.get(s.player.id) ?? 0);
+      const r = rows.get(s.player.name) ?? { name: s.player.name, net: 0, sessions: 0, hands: 0, wins: 0, seated: false };
+      r.net += live; r.sessions += 1; r.hands += this.handsPlayed.get(s.player.id) ?? 0; r.wins += this.wins.get(s.player.id) ?? 0; r.seated = true; r.kind = s.player.kind;
+      rows.set(s.player.name, r);
+    }
+    return [...rows.values()].sort((a, b) => b.net - a.net);
   }
 
   // ----- views -----
@@ -60,6 +84,7 @@ export class GameRuntime {
   join(name: string, stack?: number, kind: 'human' | 'bot' = 'human', persona?: Persona, seatIdx?: number): SeatToken {
     const player: Player = { id: randomBytes(8).toString('hex'), name: name.slice(0, 20) || 'Player', kind, persona };
     const seat = this.table.takeSeat(player, stack ?? this.table.config.defaultStack, seatIdx);
+    this.buyIn.set(player.id, seat.stack); this.handsPlayed.set(player.id, 0);
     const token = randomBytes(32).toString('hex');
     const st: SeatToken = { token, seatIdx: seat.idx, playerId: player.id, gameId: this.id };
     this.tokens.set(token, st);
@@ -67,8 +92,9 @@ export class GameRuntime {
     return st;
   }
   addBot(persona: Persona, seatIdx?: number): SeatToken {
-    const names = BOT_NAMES[persona];
-    const name = `${names[botSerial++ % names.length]} (${persona})`;
+    const used = new Set(this.table.seats.map((s) => s.player?.name));
+    const free = BOT_LIST.filter((n) => !used.has(n));
+    const name = free.length ? free[randomBytes(2).readUInt16BE(0) % free.length] : `Bot${randomBytes(2).toString('hex')}`;
     return this.join(name, undefined, 'bot', persona, seatIdx);
   }
   resolve(token: string): SeatToken | undefined {
@@ -84,6 +110,22 @@ export class GameRuntime {
     this.table.leaveSeat(st.seatIdx);
     this.tokens.delete(token);
     queueMicrotask(() => this.notify());
+  }
+  addChips(seatIdx: number, amount: number) {
+    const seat = this.table.seats[seatIdx];
+    this.table.addChips(seatIdx, amount);
+    if (seat.player) this.buyIn.set(seat.player.id, (this.buyIn.get(seat.player.id) ?? 0) + Math.floor(amount));
+    queueMicrotask(() => this.notify());
+  }
+  /** "Close table": everyone (humans and agents) leaves, game stops, leaderboard cleared. The table stays up for a fresh start. */
+  reset() {
+    this.pause();
+    for (const s of this.table.seats) if (s.player) this.kick(s.idx);
+    this.table.clearHand();
+    this.table.state.handNo = 0; this.table.state.dealerSeat = null;
+    this.leaderboard.clear(); this.buyIn.clear(); this.handsPlayed.clear(); this.wins.clear(); this.wonThisHand.clear();
+    this.chat = [];
+    this.say('系统', null, '牌桌已重置。', 'table');
   }
   kick(seatIdx: number) {
     const seat = this.table.seats[seatIdx];
@@ -131,6 +173,7 @@ export class GameRuntime {
     const seat = this.table.seats[st.seatIdx];
     if (seat.stack > 0 || (seat.inHand && !this.table.handDone)) throw new EngineError('not_busted', 'rebuy only when busted');
     this.table.addChips(st.seatIdx, this.table.config.defaultStack);
+    this.buyIn.set(st.playerId, (this.buyIn.get(st.playerId) ?? 0) + this.table.config.defaultStack);
     queueMicrotask(() => this.notify());
     this.maybeStartHand();
   }

@@ -2,13 +2,14 @@
 import type { View, ActionType } from '@pokergarden/engine';
 export type { View };
 export interface ChatMsg { from: string; seat: number | null; text: string; ts: number; channel: 'table' | 'commentary' }
-export interface EngineState { view: View | null; chat: ChatMsg[]; connected: boolean; error: string | null; reconnecting: boolean }
+export interface LeaderRow { name: string; net: number; sessions: number; hands: number; wins: number; seated: boolean; kind?: string }
+export interface EngineState { view: View | null; chat: ChatMsg[]; leaderboard: LeaderRow[]; connected: boolean; error: string | null; reconnecting: boolean }
 
 export class EngineClient {
   private ws: WebSocket | null = null;
   private closed = false;
   private attempt = 0;
-  state: EngineState = { view: null, chat: [], connected: false, error: null, reconnecting: false };
+  state: EngineState = { view: null, chat: [], leaderboard: [], connected: false, error: null, reconnecting: false };
   private listeners = new Set<(s: EngineState) => void>();
   constructor(public api: string, public gameId: string, public token: string | null) {}
 
@@ -24,7 +25,7 @@ export class EngineClient {
     ws.onopen = () => { this.attempt = 0; this.set({ connected: true, reconnecting: false, error: null }); };
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
-      if (msg.type === 'view') this.set({ view: msg.view, chat: msg.chat ?? this.state.chat });
+      if (msg.type === 'view') this.set({ view: msg.view, chat: msg.chat ?? this.state.chat, leaderboard: msg.leaderboard ?? this.state.leaderboard });
       else if (msg.type === 'error') this.set({ error: msg.message });
     };
     ws.onclose = () => {

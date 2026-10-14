@@ -6,6 +6,7 @@ import { weakAgent } from './weak.js';
 import { makeLlmAgent } from './llm.js';
 import { gtoAgent } from './gto.js';
 import type { PersonaAgent, Decision } from './types.js';
+import { TALK } from './names.js';
 
 export const AGENTS: Record<Persona, PersonaAgent> = {
   weak: weakAgent,
@@ -66,7 +67,9 @@ export class BotRunner {
     appendJsonl(`bots-${this.rt.id}.jsonl`, { ts: Date.now(), seat: seatIdx, persona, decisionId, hand: view.hand?.no, street: view.hand?.street, decision: d, ms: Date.now() - t0, fallback });
     try {
       this.rt.actSeat(seatIdx, d.action, d.amount, decisionId);
-      if (d.note && persona !== 'weak') this.rt.say(view.seats[seatIdx].name ?? 'bot', seatIdx, d.note);
+      const name = view.seats[seatIdx].name ?? 'bot';
+      if (d.note) this.rt.say(name, seatIdx, d.note);
+      else if (d.action !== 'fold' && Math.random() < (persona === 'weak' ? 0.2 : 0.15)) { const lines = TALK[persona] ?? TALK.weak; this.rt.say(name, seatIdx, lines[Math.floor(Math.random() * lines.length)]); }
     } catch (e) {
       // stale (timeout already acted) or illegal: try a safe action if still our turn
       const h = this.rt.table.hand;

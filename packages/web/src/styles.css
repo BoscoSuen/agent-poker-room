@@ -64,14 +64,14 @@ label { display: block; font-size: 12px; color: var(--fg2); margin-bottom: 4px; 
 .handinfo { font-size: 11px; color: rgba(255,255,255,.55); }
 
 /* seats */
-.seat { position: absolute; width: 112px; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 3px; transition: opacity .2s; }
+.seat { position: absolute; min-width: 112px; max-width: 200px; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 3px; transition: opacity .2s; }
 .seat.folded .plate, .seat.folded .cards { opacity: .45; }
 .seat.out .plate { opacity: .5; }
 .seat .cards { display: flex; gap: 3px; height: 48px; }
-.seat .plate { position: relative; width: 100%; background: var(--black); border: 1px solid #2c3340; border-radius: 10px; padding: 4px 8px; text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+.seat .plate { position: relative; width: 100%; white-space: nowrap; background: var(--black); border: 1px solid #2c3340; border-radius: 10px; padding: 4px 8px; text-align: center; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
 .seat.acting .plate { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold), 0 4px 14px rgba(0,0,0,.4); }
 .seat.you .plate { border-color: #6fa0ff; }
-.seat .name { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seat .name { font-size: 12px; font-weight: 600; white-space: nowrap; }
 .seat .stack { font-family: var(--mono); font-size: 13px; color: var(--gold); }
 .seat .sub { font-size: 10px; color: var(--fg2); min-height: 12px; }
 .seat .timer { position: absolute; left: 6px; right: 6px; bottom: 2px; height: 3px; background: #333a46; border-radius: 2px; overflow: hidden; }
@@ -146,10 +146,31 @@ label { display: block; font-size: 12px; color: var(--fg2); margin-bottom: 4px; 
   .felt-wrap { padding: 6px; }
   .felt { aspect-ratio: 0.72; width: 100%; }
   .felt .oval { inset: 7% 9%; }
-  .seat { width: 88px; }
+  .seat { min-width: 88px; }
   .seat .cards { height: 40px; } .cardf { width: 28px; height: 40px; font-size: 11px; } .cardf .s { font-size: 12px; }
   .cardf.big { width: 36px; height: 50px; font-size: 14px; } .cardf.big .s { font-size: 16px; }
   .board { min-height: 50px; }
   .actionbar .btns button { padding: 12px 6px; font-size: 14px; }
   .side-toggle { display: block; }
 }
+
+/* chips */
+.chips { position: relative; display: inline-block; width: 18px; height: 22px; vertical-align: middle; margin-right: 4px; }
+.chips i { position: absolute; left: 0; width: 18px; height: 7px; border-radius: 50%; border: 1px solid rgba(0,0,0,.45); box-shadow: inset 0 0 0 3px rgba(255,255,255,.35); }
+.chips.big { width: 26px; height: 40px; margin: 0 2px; } .chips.big i { width: 26px; height: 10px; }
+.chips.c-white i { background: #e8e4d8; } .chips.c-red i { background: #d23a3a; } .chips.c-green i { background: #2e9e5b; }
+.chips.c-blue i { background: #2f6fd6; } .chips.c-purple i { background: #7b47c9; } .chips.c-black i { background: #2a2a2e; box-shadow: inset 0 0 0 3px rgba(255,255,255,.2); }
+.chip { display: flex; align-items: center; }
+.potwrap { display: flex; align-items: center; gap: 4px; }
+/* seat extras */
+.ptag { display: inline-block; margin-left: 4px; padding: 0 5px; border-radius: 999px; background: #2b3a4d; color: #9fc3ff; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; vertical-align: 1px; }
+.posn { font-size: 10px; color: #9fc3ad; }
+.bubble { position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, -4px); background: #fff8e6; color: #1a1407; font-size: 12px; padding: 5px 8px; border-radius: 10px; max-width: 160px; width: max-content; z-index: 5; box-shadow: 0 4px 12px rgba(0,0,0,.4); animation: pop .2s ease-out; }
+.bubble::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #fff8e6; }
+@keyframes pop { from { transform: translate(-50%, 4px); opacity: 0; } to { transform: translate(-50%, -4px); opacity: 1; } }
+.actionbar .leave { flex: 0 0 auto; background: #2b2b33; border-color: #4a4a55; color: #ffb3b0; font-weight: 500; }
+/* leaderboard */
+.lb table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.lb th, .lb td { padding: 5px 4px; border-bottom: 1px dotted var(--line); text-align: left; }
+.lb th { color: var(--fg2); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+.lb .r { text-align: right; } .lb .pos { color: #bff3d9; } .lb .neg { color: #ffb3b0; } .lb tr.seated td { color: var(--fg); }

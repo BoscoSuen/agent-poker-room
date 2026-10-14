@@ -6,6 +6,33 @@ import { Card } from './Card';
 type Props = { client: EngineClient; es: EngineState; hostKey: string | null; gameId: string; api: string; onToken: (t: string | null) => void };
 
 const N = 9;
+
+/** Chip stack: discs colored by denomination (relative to the big blind), count grows with amount. */
+function Chips({ amount, bb, big }: { amount: number; bb: number; big?: boolean }) {
+  const x = amount / Math.max(1, bb);
+  const cls = x >= 100 ? 'c-black' : x >= 50 ? 'c-purple' : x >= 20 ? 'c-blue' : x >= 5 ? 'c-green' : x >= 1 ? 'c-red' : 'c-white';
+  const n = Math.max(1, Math.min(big ? 8 : 5, Math.round(Math.log2(x + 1) * 1.6)));
+  return <span class={`chips ${cls} ${big ? 'big' : ''}`}>{Array.from({ length: n }, (_, i) => <i style={{ bottom: `${i * (big ? 4 : 3)}px` }} />)}</span>;
+}
+
+/** Position names clockwise from the small blind for the seats dealt into this hand. */
+function positions(v: View): Record<number, string> {
+  const out: Record<number, string> = {};
+  const inHand = v.seats.filter((s) => s.inHand).map((s) => s.idx);
+  if (inHand.length < 2) return out;
+  const sb = v.seats.find((s) => s.isSB)?.idx; const dealer = v.seats.find((s) => s.isDealer)?.idx;
+  if (sb === undefined || dealer === undefined) return out;
+  const order: number[] = []; let cur = sb;
+  for (let k = 0; k < N && order.length < inHand.length; k++) { if (inHand.includes(cur)) order.push(cur); cur = (cur + 1) % N; }
+  const n = order.length;
+  let labels: string[];
+  if (n === 2) labels = ['BTN', 'BB'];
+  else if (n === 3) labels = ['SB', 'BB', 'BTN'];
+  else if (n === 4) labels = ['SB', 'BB', 'CO', 'BTN'];
+  else { const mid = ['UTG', 'UTG+1', 'MP', 'LJ', 'HJ'].slice(-(n - 4)); labels = ['SB', 'BB', ...mid, 'CO', 'BTN']; }
+  order.forEach((idx, i) => { out[idx] = labels[i]; });
+  return out;
+}
 function seatPos(d: number, mobile: boolean) {
   // d = clockwise offset from the hero seat (hero at bottom center)
   const a = (Math.PI / 2) + (d * 2 * Math.PI) / N;
@@ -20,13 +47,17 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
   useEffect(() => { const on = () => setMobile(window.innerWidth <= 860); window.addEventListener('resize', on); return () => window.removeEventListener('resize', on); }, []);
   const [bbMode, setBbMode] = useState(false);
   const [join, setJoin] = useState<{ seat?: number } | null>(null);
-  const [tab, setTab] = useState<'log' | 'chat' | 'host'>(hostKey ? 'host' : 'log');
+  const [tab, setTab] = useState<'log' | 'chat' | 'board' | 'host'>(hostKey ? 'host' : 'log');
   const [collapsed, setCollapsed] = useState(true);
   const fmt = (n: number) => bbMode ? (n / v.table.bigBlind).toFixed(n % v.table.bigBlind ? 1 : 0) + ' BB' : n.toLocaleString();
 
   // timer re-render
   const [, force] = useState(0);
   useEffect(() => { if (v.hand?.actionOn === null || !v.hand) return; const t = setInterval(() => force((x) => x + 1), 100); return () => clearInterval(t); }, [v.hand?.decisionId]);
+  // re-render while chat bubbles are fading
+  useEffect(() => { const t = setInterval(() => force((x) => x + 1), 1000); const stop = setTimeout(() => clearInterval(t), 9000); return () => { clearInterval(t); clearTimeout(stop); }; }, [es.chat.length]);
+  const pos = positions(v);
+  const bubbleFor = (idx: number) => { const m = [...es.chat].reverse().find((c) => c.seat === idx); return m && Date.now() - m.ts < 7000 ? m.text : null; };
 
   const hero = you ?? 0;
   const rot = (idx: number) => (idx - hero + N) % N;
@@ -62,7 +93,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
             <div class="oval" data-label="Poker Garden" />
             <div class="center">
               <div class="board">{(h?.board ?? []).map((c) => <Card c={c} big />)}</div>
-              {h ? <div class="pot"><small>POT</small>{fmt(h.pot)}</div> : <div class="handinfo">{v.table.running ? 'next hand starting…' : 'table idle'}</div>}
+              {h ? <div class="potwrap">{h.pot > 0 ? <><Chips amount={h.pot} bb={v.table.bigBlind} big /><Chips amount={h.pot / 3} bb={v.table.bigBlind} big /></> : null}<div class="pot"><small>POT</small>{fmt(h.pot)}</div></div> : <div class="handinfo">{v.table.running ? 'next hand starting…' : 'table idle'}</div>}
               {h ? <div class="handinfo">{h.street}{h.done && h.results ? ` · ${h.results.map((r) => r.winners.map((w) => `${v.seats[w.seat].name} wins ${fmt(w.amount)}${w.hand ? ' (' + w.hand + ')' : ''}`).join(', ')).join(' · ')}` : ''}</div> : null}
             </div>
             {v.seats.map((s) => {
@@ -83,10 +114,12 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
               return (
                 <div class={`seat ${s.folded ? 'folded' : ''} ${s.sittingOut || (!s.inHand && h) ? 'out' : ''} ${acting ? 'acting' : ''} ${isYou ? 'you' : ''} ${winners.has(s.idx) ? 'win' : ''}`} style={{ left: `${p.x}%`, top: `${p.y}%` }}>
                   <div class="cards">{showCards ? (s.holeCards ? s.holeCards.map((c) => <Card c={c} big={isYou && !mobile} />) : [<Card c={null} />, <Card c={null} />]) : null}</div>
+                  {bubbleFor(s.idx) ? <div class="bubble">{bubbleFor(s.idx)}</div> : null}
                   <div class="plate">
-                    <div class="name">{s.name}{s.kind === 'bot' ? ' 🤖' : ''}</div>
+                    <div class="name">{s.name}{s.kind === 'bot' ? <span class="ptag">{s.persona}</span> : ''}</div>
                     <div class="stack">{s.stack === 0 && s.inHand ? 'ALL-IN' : fmt(s.stack)}</div>
-                    <div class="sub">{!s.connected && s.kind === 'human' ? <span class="dc">disconnected</span> : s.sittingOut ? 'sitting out' : winners.has(s.idx) && h?.done ? <span class="ok">+{fmt(winAmount(s.idx))}</span> : s.lastAction ? s.lastAction.replace(/(\d+)$/, (m) => fmt(Number(m))) : s.persona ? <span class="persona">{s.persona}</span> : ''}</div>
+                    {pos[s.idx] ? <div class="posn">({pos[s.idx]})</div> : null}
+                    <div class="sub">{!s.connected && s.kind === 'human' ? <span class="dc">disconnected</span> : s.sittingOut ? 'sitting out' : winners.has(s.idx) && h?.done ? <span class="ok">+{fmt(winAmount(s.idx))}</span> : s.lastAction ? s.lastAction.replace(/(\d+)$/, (m) => fmt(Number(m))) : ''}</div>
                     {acting ? <div class={`timer ${bank ? 'bank' : ''}`}><i style={{ transform: `scaleX(${frac})` }} /></div> : null}
                   </div>
                 </div>
@@ -99,7 +132,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
               const bp = { x: p.x + (center.x - p.x) * 0.42, y: p.y + (center.y - p.y) * 0.42 };
               const dp = { x: p.x + (center.x - p.x) * 0.3 + 5, y: p.y + (center.y - p.y) * 0.3 + 3 };
               return (<>
-                {s.streetBet > 0 ? <div class="chip" style={{ left: `${bp.x}%`, top: `${bp.y}%` }}>{fmt(s.streetBet)}</div> : null}
+                {s.streetBet > 0 ? <div class="chip" style={{ left: `${bp.x}%`, top: `${bp.y}%` }}><Chips amount={s.streetBet} bb={v.table.bigBlind} />{fmt(s.streetBet)}</div> : null}
                 {s.isDealer ? <div class="dbtn" style={{ left: `${dp.x}%`, top: `${dp.y}%` }}>D</div> : null}
               </>);
             })}
@@ -168,6 +201,7 @@ function ActionBar({ v, client, fmt, you, onSit, onBb, onLeave }: { v: View; cli
   }
   const toCall = call?.amount ?? 0;
   const pot = h!.pot;
+  const confirmRaise = () => { if (br) act(br.action, Math.min(br.max!, Math.max(br.min!, Math.round(amt || br.min!)))); };
   const preset = (x: number) => { if (!br) return 0; const base = h!.currentBet === 0 ? Math.round(pot * x) : Math.round(h!.currentBet + (pot + toCall) * x); return Math.min(br.max!, Math.max(br.min!, base)); };
   return (
     <div class="actionbar">
@@ -179,22 +213,23 @@ function ActionBar({ v, client, fmt, you, onSit, onBb, onLeave }: { v: View; cli
           <button onClick={() => setAmt(preset(2 / 3))}>⅔ pot</button>
           <button onClick={() => setAmt(preset(1))}>Pot</button>
           <button onClick={() => setAmt(br.max!)}>All-in</button>
-          <input type="range" min={br.min} max={br.max} step={1} value={amt} onInput={(e) => setAmt(Number((e.target as HTMLInputElement).value))} />
-          <input type="number" min={br.min} max={br.max} value={amt} onInput={(e) => setAmt(Number((e.target as HTMLInputElement).value))} />
+          <input type="range" min={br.min} max={br.max} step={1} value={amt} onInput={(e) => setAmt(Number((e.target as HTMLInputElement).value))} onKeyDown={(e) => { if (e.key === 'Enter') confirmRaise(); }} />
+          <input type="number" min={br.min} max={br.max} value={amt} ref={(el) => { if (el && document.activeElement !== el && !(document.activeElement instanceof HTMLInputElement)) { el.focus(); el.select(); } }} onInput={(e) => setAmt(Number((e.target as HTMLInputElement).value))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmRaise(); } }} />
         </div>
       ) : null}
       <div class="btns">
+        <button class="leave" title="Fold and leave" onClick={onLeave}>Leave</button>
         <button class="fold" onClick={() => act('fold')}>Fold</button>
         {check ? <button class="call" onClick={() => act('check')}>Check</button> : <button class="call" onClick={() => act('call')}>Call {fmt(toCall)}{toCall >= me.stack ? ' (all-in)' : ''}</button>}
         {br ? (raising
-          ? <button class="raise" onClick={() => act(br.action, Math.min(br.max!, Math.max(br.min!, Math.round(amt))))}>{br.action === 'bet' ? 'Bet' : 'Raise to'} {fmt(Math.min(br.max!, Math.max(br.min!, Math.round(amt || 0))))}{amt >= br.max! ? ' (all-in)' : ''}</button>
+          ? <button class="raise" onClick={confirmRaise}>{br.action === 'bet' ? 'Bet' : 'Raise to'} {fmt(Math.min(br.max!, Math.max(br.min!, Math.round(amt || 0))))}{amt >= br.max! ? ' (all-in)' : ''}</button>
           : <button class="raise" onClick={() => setRaising(true)}>{br.action === 'bet' ? 'Bet' : 'Raise'}</button>) : null}
       </div>
     </div>
   );
 }
 
-function SidePanel({ tab, setTab, collapsed, v, es, client, hostKey, gameId, api, fmt }: { tab: 'log' | 'chat' | 'host'; setTab: (t: any) => void; collapsed: boolean; v: View; es: EngineState; client: EngineClient; hostKey: string | null; gameId: string; api: string; fmt: (n: number) => string }) {
+function SidePanel({ tab, setTab, collapsed, v, es, client, hostKey, gameId, api, fmt }: { tab: 'log' | 'chat' | 'board' | 'host'; setTab: (t: any) => void; collapsed: boolean; v: View; es: EngineState; client: EngineClient; hostKey: string | null; gameId: string; api: string; fmt: (n: number) => string }) {
   // keep a rolling log across hands
   const logRef = useRef<{ hand: number; lines: { t: string; cls?: string }[] }[]>([]);
   const h = v.hand;
@@ -232,6 +267,7 @@ function SidePanel({ tab, setTab, collapsed, v, es, client, hostKey, gameId, api
       <div class="tabs">
         <button class={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>Log</button>
         <button class={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>Chat {es.chat.length ? `(${es.chat.length})` : ''}</button>
+        <button class={tab === 'board' ? 'on' : ''} onClick={() => setTab('board')}>Board</button>
         {hostKey ? <button class={tab === 'host' ? 'on' : ''} onClick={() => setTab('host')}>Host</button> : null}
       </div>
       {tab === 'log' ? <div class="body log" ref={bodyRef}>{logRef.current.flatMap((x) => x.lines).map((l) => <div class={`line ${l.cls ?? ''}`}>{l.t}</div>)}{!h ? <div class="muted">No hand yet.</div> : null}</div> : null}
@@ -239,6 +275,13 @@ function SidePanel({ tab, setTab, collapsed, v, es, client, hostKey, gameId, api
         <div class="body chat" ref={bodyRef}>{es.chat.map((m) => <div class={`msg ${m.channel}`}><b>{m.from}</b> {m.text}</div>)}{es.error ? <div class="err">{es.error}</div> : null}</div>
         <form class="chat" style="display:flex" onSubmit={(e) => { e.preventDefault(); if (text.trim()) client.chat(text.trim()); setText(''); }}><input value={text} onInput={(e) => setText((e.target as HTMLInputElement).value)} placeholder="Say something…" maxLength={500} /><button type="submit">Send</button></form>
       </> : null}
+      {tab === 'board' ? <div class="body lb">
+        <table><thead><tr><th>#</th><th>Name</th><th class="r">Net</th><th class="r">Wins</th><th class="r">Sits</th></tr></thead><tbody>
+          {es.leaderboard.map((r, i) => <tr class={r.seated ? 'seated' : ''}><td>{i + 1}</td><td>{r.name}{r.kind === 'bot' ? ' 🤖' : ''}{r.seated ? ' ●' : ''}</td><td class={`r mono ${r.net > 0 ? 'pos' : r.net < 0 ? 'neg' : ''}`}>{r.net > 0 ? '+' : ''}{fmt(r.net)}</td><td class="r mono">{r.wins}</td><td class="r mono">{r.sessions}</td></tr>)}
+          {es.leaderboard.length === 0 ? <tr><td colSpan={5} class="muted">Nobody yet.</td></tr> : null}
+        </tbody></table>
+        <p class="muted" style="font-size:11px">Net = chips now − chips bought in; Wins = hands won; Sits = times seated. Per name, across seatings. ● currently seated.</p>
+      </div> : null}
       {tab === 'host' && hostKey ? <HostPanel v={v} hostKey={hostKey} gameId={gameId} api={api} /> : null}
     </div>
   );
@@ -254,7 +297,8 @@ function HostPanel({ v, hostKey, gameId, api }: { v: View; hostKey: string; game
       <div class="sec"><h4>Invite</h4><div class="invite"><input readonly value={invite} onFocus={(e) => (e.target as HTMLInputElement).select()} /><button onClick={copy}>{copied ? '✓' : 'Copy'}</button></div></div>
       <div class="sec"><h4>Game</h4><div class="row">
         {v.table.running ? <button onClick={() => call('pause')}>Pause after hand</button> : <button class="primary" onClick={() => call('start')}>Start (fills to {v.table.autoFillTo} with agents)</button>}
-        <button class="danger" onClick={() => { if (confirm('Close this table for everyone?')) call('close'); }}>Close table</button>
+        <button class="danger" onClick={() => { if (confirm('Close table: everyone leaves (humans and agents), the game stops and the leaderboard is cleared. The table stays open for a fresh start. Continue?')) call('close'); }}>Close table</button>
+        <button class="danger" onClick={() => { if (confirm('Exit game: shut this table down for good (tunnel closed, link dead). Continue?')) call('exit'); }}>Exit game</button>
       </div></div>
       <div class="sec"><h4>Add agent</h4><div class="row">
         <select style="width:auto" value={persona} onChange={(e) => setPersona((e.target as HTMLSelectElement).value)}>
@@ -263,7 +307,7 @@ function HostPanel({ v, hostKey, gameId, api }: { v: View; hostKey: string; game
         <button onClick={() => call('add_bot', { persona })}>Add</button>
       </div></div>
       <div class="sec"><h4>Seats</h4>
-        {v.seats.filter((s) => s.name).map((s) => <div class="seatrow"><span>{s.idx + 1}. {s.name} <span class="muted mono">{s.stack}</span></span><span class="row" style="gap:4px"><button style="padding:2px 6px;font-size:11px" onClick={() => call('add_chips', { seat: s.idx, amount: v.table.bigBlind * 100 })}>+{v.table.bigBlind * 100}</button><button style="padding:2px 6px;font-size:11px" class="danger" onClick={() => call('kick', { seat: s.idx })}>kick</button></span></div>)}
+        {v.seats.filter((s) => s.name).map((s) => <div class="seatrow"><span>{s.idx + 1}. {s.name}{s.persona ? <span class="ptag">{s.persona}</span> : null} <span class="muted mono">{s.stack}</span></span><span class="row" style="gap:4px"><button style="padding:2px 6px;font-size:11px" onClick={() => call('add_chips', { seat: s.idx, amount: v.table.bigBlind * 100 })}>+{v.table.bigBlind * 100}</button><button style="padding:2px 6px;font-size:11px" class="danger" onClick={() => call('kick', { seat: s.idx })}>kick</button></span></div>)}
       </div>
       {err ? <div class="err">{err}</div> : null}
     </div>

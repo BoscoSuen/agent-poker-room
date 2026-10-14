@@ -35,10 +35,11 @@ export async function chat(messages: ChatMessage[], signal: AbortSignal, opts: {
 
 /** Public table talk must not leak private information. Drop notes that look like they mention cards or hand strength. */
 const LEAK = /[♠♥♦♣]|\b[AKQJT2-9][AKQJT2-9]?[shdc]?\b(?=.*\b(suited|offsuit|off|pair|kicker)\b)|\b(ace|king|queen|jack|ten|nine|eight|seven|six|five|four|three|deuce|two)s?[- ](ace|king|queen|jack|ten|nine|eight|seven|six|five|four|three|deuce|two|high|rag|x)\b|\b(pair|two pair|trips|set|straight|flush|full house|quads|boat|draw|gutshot|blockers?|overcards?|top pair|nut|nuts|air|bluff(ing)?|missed|whiff)\b|\b[AKQJT2-9]{2}[so]\b|\b(AA|KK|QQ|JJ|TT|AK|AQ|AJ|KQ)\b/i;
+const LEAK_ZH = /[AKQJT2-9][♠♥♦♣shdc]|(?:^|[^\u4e00-\u9fa5])(?:[AKQJT]|10|[2-9]){2}(?:[^\u4e00-\u9fa5]|$)|对子|两对|三条|顺子|同花|葫芦|四条|听牌|口袋|一对|顶对|中对|底对|踢脚|诈唬|偷鸡|空气|牌力|牌很|手牌|我的牌|起手|拿着|拿了|AA|KK|QQ|JJ|AK|AQ|大牌|小牌|烂牌|好牌|垃圾牌|同花听|顺子听|阻断/i;
 export function safeNote(note: unknown): string | undefined {
   if (typeof note !== 'string') return undefined;
-  const n = note.trim().slice(0, 120);
-  if (!n || LEAK.test(n)) return undefined;
+  const n = note.trim().slice(0, 60);
+  if (!n || LEAK.test(n) || LEAK_ZH.test(n)) return undefined;
   return n;
 }
 
@@ -51,7 +52,7 @@ export function extractJson(text: string): any | null {
   return null;
 }
 
-const OUTPUT_RULES = `Respond with ONLY a JSON object: {"action": "fold|check|call|bet|raise", "amount": <number, only for bet/raise: the TOTAL you want your bet this street to be ("raise to"), in chips>, "note": "<optional, max 12 words of table talk shown to opponents>"}. Pick only from the legal actions given. The note is PUBLIC: never mention or hint at your hole cards, hand strength, draws, or reasoning in it; keep it to banter like "let's see a flop". No markdown.`;
+const OUTPUT_RULES = `Respond with ONLY a JSON object: {"action": "fold|check|call|bet|raise", "amount": <number, only for bet/raise: the TOTAL you want your bet this street to be ("raise to"), in chips>, "note": "<optional table talk, 简体中文, at most 15 characters, shown to opponents>"}. Pick only from the legal actions given. The note is PUBLIC and must be written in Chinese: never mention or hint at your hole cards, hand strength, draws, or reasoning in it; keep it to banter in your persona's voice (solid player: calm and brief; aggressive player: cocky, taunting). No markdown.`;
 
 const PERSONAS: Record<string, string> = {
   default: `You are a solid, balanced No-Limit Hold'em player at a 9-max cash table (tight-aggressive). Play a sound fundamental strategy: open strong hands, respect position, value bet made hands, bluff selectively with blockers or draws, fold junk to big bets. Size bets relative to the pot (typically 50-75% pot postflop, 2.5-3x open preflop, 3x the raise for a 3-bet). Avoid calling stations' tendencies: do not call large bets with weak hands.`,

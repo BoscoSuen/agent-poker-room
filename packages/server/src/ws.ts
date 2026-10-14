@@ -37,7 +37,7 @@ function serve(c: Client) {
   const send = (obj: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(obj)); };
   const push = () => {
     const view = c.rt.view(c.seatIdx);
-    const payload = { type: 'view', view, chat: c.rt.recentChat(30), hostKeyOk: undefined as undefined };
+    const payload = { type: 'view', view, chat: c.rt.recentChat(30), leaderboard: c.rt.leaderboardRows() };
     const s = JSON.stringify(payload);
     if (s !== c.lastSent) { c.lastSent = s; send(payload); }
   };

@@ -14,11 +14,12 @@ startLobbySync();
 setInterval(reapIdle, 60_000);
 
 // Graceful shutdown: kill tunnels so cloudflared children don't outlive the engine.
-import { games } from './registry.js';
+import { games, shutdown } from './registry.js';
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
-    log('server', `${sig}: closing ${games.size} game(s)`);
-    for (const g of games.values()) { try { g.rt.close(); } catch { /* ignore */ } }
+    log('server', `${sig}: stopping ${games.size} game(s), tunnels closed; tables will be restored on restart`);
+    shutdown.inProgress = true;
+    for (const g of games.values()) { try { g.tunnel?.close(); } catch { /* ignore */ } }
     setTimeout(() => process.exit(0), 300);
   });
 }

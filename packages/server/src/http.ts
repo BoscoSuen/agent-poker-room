@@ -63,7 +63,8 @@ host.use('*', async (c, next) => {
 });
 host.post('/start', (c) => { const g = games.get(c.req.param('id')!)!; g.rt.start(); return c.json({ ok: true }); });
 host.post('/pause', (c) => { const g = games.get(c.req.param('id')!)!; g.rt.pause(); return c.json({ ok: true }); });
-host.post('/close', (c) => { const g = games.get(c.req.param('id')!)!; g.rt.close(); return c.json({ ok: true }); });
+host.post('/close', (c) => { const g = games.get(c.req.param('id')!)!; g.rt.reset(); return c.json({ ok: true }); });
+host.post('/exit', (c) => { const g = games.get(c.req.param('id')!)!; g.rt.close(); return c.json({ ok: true }); });
 host.post('/add_bot', async (c) => {
   const g = games.get(c.req.param('id')!)!;
   const body = await c.req.json().catch(() => ({}));
@@ -80,7 +81,7 @@ host.post('/kick', async (c) => {
 host.post('/add_chips', async (c) => {
   const g = games.get(c.req.param('id')!)!;
   const body = await c.req.json().catch(() => ({}));
-  try { g.rt.table.addChips(Number(body.seat), Number(body.amount)); return c.json({ ok: true }); }
+  try { g.rt.addChips(Number(body.seat), Number(body.amount)); return c.json({ ok: true }); }
   catch (e: any) { return c.json({ error: e.code ?? 'error', message: e.message }, 400); }
 });
 app.route('/games/:id/host', host);

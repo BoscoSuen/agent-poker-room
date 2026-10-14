@@ -78,7 +78,7 @@ export const gtoAgent: PersonaAgent = {
     const t0 = Date.now();
     let d: Decision | null = null;
     if (system && user) {
-      const note = `\n\nNOTE: this is actually a ${v.seats.filter((s) => s.inHand && !s.folded).length}-handed pot at a 9-max table; the heads-up framing above treats the main opponent as "villain". Amounts in the JSON must be in BB units as "bet/raise TO" sizes. Also add a "note" field: optional public table talk (max 12 words) that must NOT reveal or hint at your cards, hand strength or reasoning.`;
+      const note = `\n\nNOTE: this is actually a ${v.seats.filter((s) => s.inHand && !s.folded).length}-handed pot at a 9-max table; the heads-up framing above treats the main opponent as "villain". Amounts in the JSON must be in BB units as "bet/raise TO" sizes. Also add a "note" field: optional public table talk in 简体中文 (max 15 characters) that must NOT reveal or hint at your cards, hand strength or reasoning.`;
       const { text } = await chat([{ role: 'system', content: system }, { role: 'user', content: user + note }], signal, { maxTokens: 400 });
       const p = extractJson(text);
       if (p) {
