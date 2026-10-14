@@ -44,6 +44,19 @@ export function Game({ id }: { id: string }) {
     return () => { unsub(); c.close(); };
   }, [info?.status, info?.api, token]);
 
+  // 3. while disconnected, re-resolve the engine URL from the lobby (an engine restart moves the table to a new tunnel)
+  useEffect(() => {
+    if (!info || info.status !== 'live' || !es || es.connected) return;
+    if (new URLSearchParams(location.search).get('api')) return;
+    const t = setInterval(async () => {
+      try {
+        const g = await api.game(id);
+        if (g.status !== 'live' || (g.api && g.api !== info.api)) { setEs(null); setInfo(g); if (g.hostKey) { setHostKey(g.hostKey); ls.set(`pg:${id}:host`, g.hostKey); } }
+      } catch { /* keep trying */ }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [info?.api, info?.status, es?.connected, id]);
+
   const onToken = (t: string | null) => { ls.set(`pg:${id}:token`, t); setToken(t); };
 
   if (err) return <Msg title="Table not found" text={err} />;
@@ -51,7 +64,7 @@ export function Game({ id }: { id: string }) {
   if (info.status === 'pending') return <Msg spinner title="Spinning up your table" text="The engine is starting a tunnel for this table. Usually takes 5–15 seconds." />;
   if (info.status === 'error') return <Msg title="Engine error" text={info.error ?? 'unknown'} />;
   if (info.status === 'closed') return <Msg title="Table closed" text="This table has been closed by the host." />;
-  if (!es || !es.view) return <Msg spinner text={es?.reconnecting ? 'Reconnecting to the table…' : 'Connecting to the table…'} />;
+  if (!es || !es.view) return <Msg spinner text={es?.reconnecting ? 'Reconnecting to the table… (if the engine just restarted this takes up to ~90 s)' : 'Connecting to the table…'} />;
   return <TableUI client={clientRef.current!} es={es} hostKey={hostKey} gameId={id} api={info.api!} onToken={onToken} />;
 }
 
