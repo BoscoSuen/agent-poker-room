@@ -1,6 +1,6 @@
 import { config } from './config.js';
 import { log } from './log.js';
-import { createGame, games } from './registry.js';
+import { createGame, games, restoreGames, type Game } from './registry.js';
 
 /**
  * Outbound-only lobby sync with the Cloudflare Pages API:
@@ -24,8 +24,7 @@ export function startLobbySync() {
           log('lobby', `claiming game ${g.id}`);
           try {
             const game = await createGame(g.config ?? {}, { id: g.id, ownerEmail: g.owner ?? null });
-            game.rt.onClose = ((orig) => () => { orig?.(); void api(`/api/games/${g.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'closed' }) }); })(game.rt.onClose);
-            await api(`/api/games/${g.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'live', api: game.rt.publicUrl, hostKey: game.rt.hostKey, summary: game.rt.summary() }) });
+            await reportLive(game);
           } catch (e) {
             log('lobby', `failed to claim ${g.id}`, { e: String(e).slice(0, 300) });
             await api(`/api/games/${g.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'error', error: String(e).slice(0, 200) }) });
@@ -35,7 +34,10 @@ export function startLobbySync() {
     } catch (e) { log('lobby', 'poll error', { e: String(e).slice(0, 200) }); }
     finally { busy = false; }
   };
-  setInterval(poll, config.lobby.pollMs);
-  void poll();
+  const reportLive = async (game: Game) => {
+    game.rt.onClose = ((orig) => () => { orig?.(); void api(`/api/games/${game.rt.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'closed' }) }); })(game.rt.onClose);
+    await api(`/api/games/${game.rt.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'live', api: game.rt.publicUrl, hostKey: game.rt.hostKey, summary: game.rt.summary() }) });
+  };
+  void restoreGames(reportLive).then(() => { setInterval(poll, config.lobby.pollMs); void poll(); });
   log('lobby', `sync enabled against ${config.lobby.url}`);
 }

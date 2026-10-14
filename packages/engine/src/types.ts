@@ -101,6 +101,7 @@ export interface Hand {
   history: PlayerAction[];
   pots: Pot[] | null;
   results: PotResult[] | null;
+  deadMoney: number;           // chips left in the pot by players who left mid-hand
   startedAt: number;
   endedAt: number | null;
 }

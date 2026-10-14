@@ -143,19 +143,40 @@ describe('Table betting', () => {
     t.act(cur(t), 'call', undefined, t.hand!.decisionId);
   });
 
-  it('leaving mid-hand folds and removes after the hand', () => {
+  it('leaving mid-hand folds immediately (even out of turn) and removes after the hand', () => {
     const t = mk(3);
     t.startHand();
-    t.leaveSeat(1); // not their turn: pending
-    expect(t.seats[1].player).not.toBeNull();
-    a(t, 'call'); // seat0; now seat1 to act -> auto? no: leaveSeat only folds if it's their turn. act as seat1:
-    expect(cur(t)).toBe(1);
-    t.leaveSeat(1);
-    expect(t.seats[1].folded).toBe(true);
-    a(t, 'check');
-    // play out to end
-    while (!t.handDone) a(t, 'check');
+    const total = t.seats.reduce((x, s) => x + s.stack, 0) + t.potTotal;
+    t.leaveSeat(1); // not their turn: folded, seat freed at once, their 10 SB stays in the pot
     expect(t.seats[1].player).toBeNull();
+    expect(t.potTotal).toBe(30);
+    const left = t.events.find((e) => e.type === 'seat_left') as any;
+    expect(left.stack).toBe(990); // leaver keeps their stack
+    // someone can take the freed seat right away (dealt in next hand)
+    t.takeSeat(p(9), 500, 1);
+    expect(t.seats[1].inHand).toBe(false);
+    a(t, 'call'); // seat0
+    expect(cur(t)).toBe(2); // seat1 skipped
+    a(t, 'check');
+    while (!t.handDone) a(t, 'check');
+    expect(t.seats.reduce((x, s) => x + s.stack, 0) - 500 + left.stack).toBe(total);
+    expect(t.potTotal).toBe(0);
+  });
+  it('leaving when everyone else folded awards the pot and ends the hand', () => {
+    const t = mk(3);
+    t.startHand();
+    a(t, 'fold'); // seat0
+    t.leaveSeat(1); // seat1 (SB) leaves while on action -> fold -> seat2 wins
+    expect(t.handDone).toBe(true);
+    expect(t.seats[2].stack).toBe(1010);
+  });
+  it('leaving out of turn when only one other player is live ends the hand', () => {
+    const t = mk(3);
+    t.startHand();
+    a(t, 'fold'); // seat0; action on seat1
+    t.leaveSeat(2); // BB leaves out of turn -> seat1 wins uncontested
+    expect(t.handDone).toBe(true);
+    expect(t.seats[1].stack).toBe(1020);
   });
 });
 
@@ -182,5 +203,30 @@ describe('view redaction', () => {
     expect(v.seats[0].holeCards).toHaveLength(2);
     expect(v.seats[1].holeCards).toHaveLength(2);
     expect(v.hand!.nonce).not.toBeNull();
+  });
+});
+
+describe('leaves during random play conserve chips', () => {
+  it('random leaves/rejoins never create or destroy chips', () => {
+    const randomInt = (n: number) => Math.floor(Math.random() * n);
+    const t = new Table({ smallBlind: 10, bigBlind: 20 });
+    let next = 0; let bank = 0; // chips held by players who left
+    for (let i = 0; i < 6; i++) t.takeSeat(p(next++), 1000, i);
+    let total = 6000;
+    for (let h = 0; h < 300; h++) {
+      t.clearHand();
+      while (t.seats.filter((s) => s.player && s.stack > 0).length < 2) { t.takeSeat(p(next++), 1000); total += 1000; }
+      for (const s of t.seats) if (s.player && s.stack === 0) { t.leaveSeat(s.idx); }
+      t.startHand();
+      while (!t.handDone) {
+        if (randomInt(8) === 0) { const occ = t.seats.filter((s) => s.player && s.inHand); const v = occ[randomInt(occ.length)]; bank += v.stack; t.leaveSeat(v.idx); if (t.handDone) break; }
+        if (randomInt(10) === 0 && t.seats.some((s) => !s.player)) { t.takeSeat(p(next++), 500 + randomInt(1500)); total += t.seats.find((s) => s.player?.id === `p${next - 1}`)!.stack; }
+        const seat = t.hand!.actionOn!; const legal = t.legalActions(seat); const pick = legal[randomInt(legal.length)];
+        t.act(seat, pick.action as any, pick.action === 'bet' || pick.action === 'raise' ? pick.min! + randomInt(pick.max! - pick.min! + 1) : undefined);
+      }
+      const onTable = t.seats.reduce((a, s) => a + s.stack, 0);
+      expect(onTable + bank).toBe(total);
+      expect(t.potTotal).toBe(0);
+    }
   });
 });

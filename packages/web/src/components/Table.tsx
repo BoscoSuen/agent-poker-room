@@ -107,7 +107,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
         </div>
         <SidePanel tab={tab} setTab={setTab} collapsed={collapsed} v={v} es={es} client={client} hostKey={hostKey} gameId={gameId} api={api} fmt={fmt} />
       </div>
-      <ActionBar v={v} client={client} fmt={fmt} you={you} onSit={() => setJoin({})} onBb={() => setBbMode(!bbMode)} onLeave={() => { client.leave(); onToken(null); }} />
+      <ActionBar v={v} client={client} fmt={fmt} you={you} onSit={() => setJoin({})} onBb={() => setBbMode(!bbMode)} onLeave={() => { client.leave(); setTimeout(() => onToken(null), 400); }} />
       {join ? <JoinModal seat={join.seat} defaultStack={(v.table as any).defaultStack ?? v.table.bigBlind * 100} onClose={() => setJoin(null)} onJoin={doJoin} /> : null}
     </div>
   );

@@ -90,12 +90,32 @@ export class Table {
   leaveSeat(seatIdx: number): void {
     const seat = this.seats[seatIdx];
     if (!seat?.player) return;
-    if (seat.inHand && !seat.folded && this.hand && this.hand.street !== 'showdown') {
+    const hand = this.hand;
+    if (seat.inHand && hand && !this.handDone) {
+      // fold now; the chips already in the pot stay there as dead money and the seat is freed immediately
       seat.pendingLeave = true;
-      if (this.hand.actionOn === seatIdx) this.act(seatIdx, 'fold');
-      return;
+      if (!seat.folded) {
+        if (hand.actionOn === seatIdx) this.act(seatIdx, 'fold');
+        else this.foldOutOfTurn(seat);
+      }
+      if (!this.handDone) {
+        hand.deadMoney += seat.handBet;
+        seat.handBet = 0; seat.streetBet = 0;
+      }
     }
-    this.removeSeat(seat);
+    if (seat.player) this.removeSeat(seat);
+  }
+  /** Fold a seat that is not currently on action (player left). */
+  private foldOutOfTurn(seat: Seat) {
+    const hand = this.hand!;
+    seat.folded = true;
+    seat.lastAction = 'fold';
+    hand.needAction = hand.needAction.filter((i) => i !== seat.idx);
+    hand.history.push({ seat: seat.idx, street: hand.street, action: 'fold', amount: 0, to: seat.streetBet, allIn: false });
+    this.emit({ type: 'action', seat: seat.idx, action: 'fold', amount: 0, to: seat.streetBet, allIn: false });
+    const live = this.livePlayers();
+    if (live.length === 1) { this.endHandUncontested(live[0]); return; }
+    if (hand.actionOn === null && hand.needAction.length === 0) this.finishStreet();
   }
   private removeSeat(seat: Seat) {
     const player = seat.player!;
@@ -178,7 +198,7 @@ export class Table {
     const hand: Hand = {
       no, deckCommit: commitDeck(deck, nonce), nonce, deck, board: [], street: 'preflop', dealer, sb, bb,
       actionOn: null, currentBet: 0, minRaise: this.config.bigBlind, raiseId: 0, needAction: [], lastAggressor: null,
-      decisionId: '', deadline: null, usingTimeBank: false, history: [], pots: null, results: null,
+      decisionId: '', deadline: null, usingTimeBank: false, history: [], pots: null, results: null, deadMoney: 0,
       startedAt: this.now(), endedAt: null,
     };
     this.state.hand = hand;
@@ -393,6 +413,7 @@ export class Table {
 
   computePots(): Pot[] {
     const contrib = this.seats.filter((s) => s.handBet > 0).map((s) => ({ idx: s.idx, amt: s.handBet, live: s.inHand && !s.folded }));
+    if (this.hand && this.hand.deadMoney > 0) contrib.push({ idx: -1, amt: this.hand.deadMoney, live: false });
     const pots: Pot[] = [];
     for (;;) {
       const liveLeft = contrib.filter((c) => c.live && c.amt > 0);
@@ -423,7 +444,7 @@ export class Table {
     return merged;
   }
 
-  get potTotal(): number { return this.seats.reduce((a, s) => a + s.handBet, 0); }
+  get potTotal(): number { return this.seats.reduce((a, s) => a + s.handBet, 0) + (this.hand?.deadMoney ?? 0); }
 
   private showdown() {
     const hand = this.hand!;
@@ -489,6 +510,7 @@ export class Table {
     const hand = this.hand!;
     hand.endedAt = this.now();
     for (const s of this.seats) { s.handBet = 0; s.streetBet = 0; }
+    hand.deadMoney = 0;
     this.emit({ type: 'hand_ended', no: hand.no, nonce: hand.nonce!, deck: [...hand.deck] });
     // keep hand visible as "last hand" until next startHand; status stays 'playing'
     (hand as any)._done = true;
