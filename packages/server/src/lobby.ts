@@ -38,6 +38,8 @@ export function startLobbySync() {
     game.rt.onClose = ((orig) => () => { orig?.(); void api(`/api/games/${game.rt.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'closed' }) }); })(game.rt.onClose);
     await api(`/api/games/${game.rt.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'live', api: game.rt.publicUrl, hostKey: game.rt.hostKey, summary: game.rt.summary() }) });
   };
-  void restoreGames(reportLive).then(() => { setInterval(poll, config.lobby.pollMs); void poll(); });
+  void restoreGames(reportLive); // games are registered synchronously, so polling can start right away without double-claiming
+  setInterval(poll, config.lobby.pollMs);
+  void poll();
   log('lobby', `sync enabled against ${config.lobby.url}`);
 }

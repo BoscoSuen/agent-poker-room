@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server';
 import { app } from './http.js';
 import { attachWebSocket } from './ws.js';
 import { startLobbySync } from './lobby.js';
-import { reapIdle } from './registry.js';
+import { reapIdle, startTunnelPool } from './registry.js';
 import { config } from './config.js';
 import { log } from './log.js';
 
@@ -11,6 +11,7 @@ const server = serve({ fetch: app.fetch, port: config.port, hostname: config.hos
 });
 attachWebSocket(server as any);
 startLobbySync();
+startTunnelPool();
 setInterval(reapIdle, 60_000);
 
 // Graceful shutdown: kill tunnels so cloudflared children don't outlive the engine.

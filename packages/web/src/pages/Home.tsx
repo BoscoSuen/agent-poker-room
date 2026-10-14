@@ -27,20 +27,30 @@ export function Home() {
 }
 
 function Login({ onLogin }: { onLogin: (e: string) => void }) {
-  const [email, setEmail] = useState(''); const [pw, setPw] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
-  const go = async (fn: 'login' | 'register') => {
-    setBusy(true); setErr('');
-    try { const r = await api[fn](email, pw); onLogin(r.email); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState(''); const [pw, setPw] = useState(''); const [pw2, setPw2] = useState('');
+  const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const mismatch = mode === 'register' && pw2.length > 0 && pw !== pw2;
+  const submit = async () => {
+    setErr('');
+    if (mode === 'register' && pw !== pw2) { setErr('Passwords do not match.'); return; }
+    setBusy(true);
+    try { const r = await api[mode](email, pw); onLogin(r.email); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   };
   return (
     <div class="card" style="max-width:420px">
-      <h2 style="margin-top:0">Host login</h2>
+      <h2 style="margin-top:0">{mode === 'login' ? 'Host login' : 'Create host account'}</h2>
       <p class="muted" style="font-size:13px">Only hosts need an account (whitelisted emails). Players join by link.</p>
-      <form onSubmit={(e) => { e.preventDefault(); go('login'); }}>
+      <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <div class="field"><label>Email</label><input type="email" value={email} onInput={(e) => setEmail((e.target as HTMLInputElement).value)} autocomplete="username" required /></div>
-        <div class="field"><label>Password</label><input type="password" value={pw} onInput={(e) => setPw((e.target as HTMLInputElement).value)} autocomplete="current-password" minLength={10} required /></div>
+        <div class="field"><label>Password{mode === 'register' ? ' (min 10 characters)' : ''}</label><input type="password" value={pw} onInput={(e) => setPw((e.target as HTMLInputElement).value)} autocomplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={10} required /></div>
+        {mode === 'register' ? <div class="field"><label>Confirm password</label><input type="password" value={pw2} onInput={(e) => setPw2((e.target as HTMLInputElement).value)} autocomplete="new-password" minLength={10} required style={mismatch ? 'border-color:var(--danger)' : ''} />{mismatch ? <div class="muted" style="color:#ffb3b0;font-size:12px;margin-top:4px">Passwords do not match.</div> : null}</div> : null}
         {err ? <div class="err">{err}</div> : null}
-        <div class="row"><button class="primary" type="submit" disabled={busy}>Log in</button><button type="button" disabled={busy} onClick={() => go('register')}>Register</button></div>
+        <div class="row">
+          {mode === 'login'
+            ? <><button class="primary" type="submit" disabled={busy}>Log in</button><button type="button" disabled={busy} onClick={() => { setMode('register'); setErr(''); }}>Register</button></>
+            : <><button class="primary" type="submit" disabled={busy || mismatch || pw.length < 10 || pw2.length === 0}>Create account</button><button type="button" disabled={busy} onClick={() => { setMode('login'); setErr(''); setPw2(''); }}>Back to log in</button></>}
+        </div>
       </form>
     </div>
   );
