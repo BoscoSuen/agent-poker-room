@@ -13,10 +13,10 @@ export const groupOf = (name: string): string | undefined => Object.keys(BOT_GRO
  * Lines are public chat: never hint at cards.
  */
 export const GROUP_TALK: Record<string, string[]> = {
-  disney: [],
-  gardenBabies: [],
-  inTheNameOfThePeople: [],
-  mingDynasty1566: [],
+  disney: ['为了迪士尼的荣耀！', '迪士尼小朋友们都学我打牌呢。'],
+  gardenBabies: ['请叫我花园牌王！','天黑了该睡觉了。', '晚安小朋友们。'],
+  inTheNameOfThePeople: ['为了汉东！', '我是汉东牌王。', '穷怕了。'],
+  mingDynasty1566: ['为了大明！', '思危，思退，思变。', '匪夷所思，匪夷所思', '你就搅吧，搅吧。'],
 };
 
 /** Canned table talk per persona. LLM personas normally write their own line; these are fallbacks when the model stays quiet or its line is filtered. */
