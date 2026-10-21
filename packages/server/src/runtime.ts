@@ -3,6 +3,7 @@ import { Table, viewFor, EngineError, type TableConfig, type TableEvent, type Pl
 import { appendJsonl, log } from './log.js';
 import { config } from './config.js';
 import { BOT_LIST } from './bots/names.js';
+import { Reads } from './reads.js';
 
 const DISCONNECT_GRACE_MS = 3_000;   // disconnected human on action: auto check/fold after 3 s
 const DISCONNECT_KICK_HANDS = 10;   // ...and after 10 such hands the seat is freed
@@ -17,6 +18,7 @@ export type ViewListener = (runtime: GameRuntime) => void;
  */
 export class GameRuntime {
   readonly table: Table;
+  readonly reads: Reads;
   readonly id: string;
   hostKey = randomBytes(24).toString('hex');
   tokens = new Map<string, SeatToken>();
@@ -39,6 +41,7 @@ export class GameRuntime {
   constructor(cfg: Partial<TableConfig>, id?: string) {
     this.id = id ?? randomBytes(6).toString('hex');
     this.table = new Table(cfg, { id: this.id });
+    this.reads = new Reads(this.table);
     this.table.onEvent((ev) => this.handleEvent(ev));
   }
 
@@ -48,6 +51,7 @@ export class GameRuntime {
 
   private handleEvent(ev: TableEvent) {
     appendJsonl(`game-${this.id}.jsonl`, { ts: Date.now(), ...ev });
+    this.reads.onEvent(ev);
     if (ev.type === 'seat_left') this.settle(ev.player.id, ev.player.name, ev.stack);
     if (ev.type === 'action' && ev.timeout) {
       const seat = this.table.seats[ev.seat];
@@ -153,6 +157,7 @@ export class GameRuntime {
     for (const s of this.table.seats) if (s.player) this.kick(s.idx);
     this.table.clearHand();
     this.table.state.handNo = 0; this.table.state.dealerSeat = null;
+    this.reads.reset();
     this.leaderboard.clear(); this.buyIn.clear(); this.handsPlayed.clear(); this.wins.clear(); this.wonThisHand.clear();
     this.chat = [];
     this.say('系统', null, '牌桌已重置。', 'table');

@@ -3,7 +3,7 @@ import type { View, ActionType, LegalAction } from '@pokergarden/engine';
 export interface Decision { action: ActionType; amount?: number; note?: string; source?: string; ms?: number }
 export interface PersonaAgent {
   name: string;
-  decide(view: View, signal: AbortSignal): Promise<Decision>;
+  decide(view: View, signal: AbortSignal, ctx?: { reads?: string }): Promise<Decision>;
 }
 
 /** Clamp a decision to the legal action set. Returns null if not salvageable. */

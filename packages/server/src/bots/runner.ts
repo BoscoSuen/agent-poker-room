@@ -62,7 +62,7 @@ export class BotRunner {
     let d: Decision | null = null;
     let fallback = false;
     try {
-      d = await agent.decide(view, ctrl.signal);
+      d = await agent.decide(view, ctrl.signal, { reads: this.rt.reads.linesFor(view) });
     } catch (e) {
       log('bot', `${persona} seat ${seatIdx} failed, falling back to weak rules`, { e: String(e).slice(0, 200) });
       fallback = true;

@@ -55,7 +55,7 @@ export function extractJson(text: string): any | null {
 const OUTPUT_RULES = `Respond with ONLY a JSON object: {"action": "fold|check|call|bet|raise", "amount": <number, only for bet/raise: the TOTAL you want your bet this street to be ("raise to"), in chips>, "note": "<optional table talk, 简体中文, at most 15 characters, shown to opponents>"}. Pick only from the legal actions given. The note is PUBLIC and must be written in Chinese: never mention or hint at your hole cards, hand strength, draws, or reasoning in it; keep it to banter in your persona's voice (solid player: calm and brief; aggressive player: cocky, taunting). No markdown.`;
 
 const PERSONAS: Record<string, string> = {
-  default: `You are a solid, balanced No-Limit Hold'em player at a 9-max cash table (tight-aggressive). Play a sound fundamental strategy: open strong hands, respect position, value bet made hands, bluff selectively with blockers or draws, fold junk to big bets. Size bets relative to the pot (typically 50-75% pot postflop, 2.5-3x open preflop, 3x the raise for a 3-bet). Avoid calling stations' tendencies: do not call large bets with weak hands.`,
+  default: `You are a solid, balanced No-Limit Hold'em player at a 9-max cash table (tight-aggressive). Play a sound fundamental strategy: open strong hands, respect position, value bet made hands, bluff selectively with blockers or draws, fold junk to big bets. Size bets relative to the pot (typically 50-75% pot postflop, 2.5-3x open preflop, 3x the raise for a 3-bet). With a hand that only beats bluffs, call a bet if you find out this player bluffs.`,
   aggressive: `You are a loose-aggressive (LAG) No-Limit Hold'em player at a 9-max cash table. You open a wide range, 3-bet often, c-bet almost always, barrel turns, and apply maximum pressure, especially on short stacks and when checked to. You still fold truly hopeless hands facing big action, but prefer raising to calling and use larger sizes (70-100% pot, overbets on scary rivers).`,
   gto: `You are a GTO-oriented No-Limit Hold'em player. Follow the strategy guidance given in the user message exactly when present; otherwise play a balanced, theoretically sound strategy.`,
 };
@@ -64,11 +64,11 @@ export function makeLlmAgent(persona: 'default' | 'aggressive'): PersonaAgent {
   const bluffRate = persona === 'aggressive' ? 0.2 : 0;
   return {
     name: persona,
-    async decide(v: View, signal: AbortSignal): Promise<Decision> {
+    async decide(v: View, signal: AbortSignal, ctx?: { reads?: string }): Promise<Decision> {
       const legal = v.legalActions;
       const messages: ChatMessage[] = [
         { role: 'system', content: `${PERSONAS[persona]}\n${OUTPUT_RULES}` },
-        { role: 'user', content: describeView(v) + '\nWhat is your action?' },
+        { role: 'user', content: describeView(v) + (persona === 'default' && ctx?.reads ? '\n' + ctx.reads : '') + '\nWhat is your action?' },
       ];
       const { text, ms, model } = await chat(messages, signal);
       const parsed = extractJson(text);
