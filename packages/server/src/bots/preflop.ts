@@ -7,30 +7,53 @@ import { RANKS, type View } from '@pokergarden/engine';
 
 const rv = (c: string) => RANKS.indexOf(c) + 2;
 
-function chen(hi: number, lo: number, suited: boolean, pair: boolean): number {
-  const pts = (r: number) => (r === 14 ? 10 : r === 13 ? 8 : r === 12 ? 7 : r === 11 ? 6 : r / 2);
-  let s = pts(hi);
-  if (pair) return Math.max(5, s * 2) + 0.01 * hi;
-  if (suited) s += 2;
-  const gap = hi - lo - 1;
-  s -= gap === 0 ? 0 : gap === 1 ? 1 : gap === 2 ? 2 : gap === 3 ? 4 : 5;
-  if (gap <= 1 && hi < 12) s += 1;
-  return s + 0.01 * hi + 0.001 * lo;
-}
+/**
+ * Raise-first-in ranges for 9-max, 100bb, written like a standard chart. Each position also opens everything from
+ * the tighter positions. Parsed once into a "tier": the tightest position that opens the hand (1 = UTG ... 7 = BTN, 9 = never).
+ */
+const RFI_RANGES: [string, string][] = [
+  ['UTG', '77+, ATs+, A5s, KTs+, QTs+, JTs, AJo+, KQo'],
+  ['UTG+1', '66+, A9s+, A4s, T9s'],
+  ['MP', '55+, A8s+, A3s, A2s, K9s, Q9s, J9s, 98s, ATo, KJo'],
+  ['LJ', '44+, A7s, A6s, T8s, 87s, QJo'],
+  ['HJ', '33+, K8s, J8s, 97s, 76s, A9o, KTo, QTo, JTo'],
+  ['CO', '22+, K7s, K6s, K5s, Q8s, T7s, 86s, 75s, 65s, 54s, A8o, K9o, Q9o, J9o, T9o'],
+  ['BTN', 'K4s, K3s, K2s, Q7s, Q6s, Q5s, Q4s, J7s, J6s, T6s, 96s, 85s, 74s, 64s, 53s, 43s, A7o, A6o, A5o, A4o, A3o, A2o, K8o, Q8o, J8o, T8o, 98o, 97o, 87o, 76o'],
+];
+const SB_RANGE = '22+, A2s+, K4s+, Q6s+, J7s+, T7s+, 97s+, 86s+, 75s+, 65s, 54s, A5o+, K9o+, Q9o+, J9o+, T9o';
+const ORDER = 'AKQJT98765432';
 
-/** hand code ("AKs", "T9o", "77") -> percentile of combos at least as strong (0 = best, 100 = worst) */
-const PCT = (() => {
-  const hands: { code: string; score: number; combos: number }[] = [];
-  for (let i = 12; i >= 0; i--) for (let j = i; j >= 0; j--) {
-    const hi = i + 2, lo = j + 2; const a = RANKS[i], b = RANKS[j];
-    if (i === j) hands.push({ code: a + b, score: chen(hi, lo, false, true), combos: 6 });
-    else { hands.push({ code: a + b + 's', score: chen(hi, lo, true, false), combos: 4 }); hands.push({ code: a + b + 'o', score: chen(hi, lo, false, false), combos: 12 }); }
+function expand(token: string): string[] {
+  const t = token.trim(); if (!t) return [];
+  const m = t.match(/^([AKQJT2-9])([AKQJT2-9])([so]?)(\+)?$/);
+  if (!m) throw new Error('bad range token ' + t);
+  const [, x, y, suf, plus] = m;
+  if (x === y) { // pair
+    const i = ORDER.indexOf(x);
+    return plus ? ORDER.slice(0, i + 1).split('').map((c) => c + c) : [x + x];
   }
-  hands.sort((x, y) => y.score - x.score);
-  const m = new Map<string, number>(); let acc = 0;
-  for (const h of hands) { acc += h.combos; m.set(h.code, (100 * acc) / 1326); }
-  return m;
-})();
+  if (!plus) return [x + y + suf];
+  const xi = ORDER.indexOf(x), yi = ORDER.indexOf(y);
+  const out: string[] = [];
+  for (let k = xi + 1; k <= yi; k++) out.push(x + ORDER[k] + suf);
+  return out;
+}
+const parse = (r: string) => new Set(r.split(',').flatMap(expand));
+
+const TIER = new Map<string, number>();
+RFI_RANGES.forEach(([, r], i) => { for (const h of parse(r)) if (!TIER.has(h)) TIER.set(h, i + 1); });
+const SB_SET = parse(SB_RANGE);
+const POS_TIER: Record<string, number> = { UTG: 1, 'UTG+1': 2, MP: 3, LJ: 4, HJ: 5, CO: 6, BTN: 7, SB: 7, BB: 7 };
+const tierOf = (code: string) => TIER.get(code) ?? 9;
+
+// fixed lists for re-raise spots
+const PREMIUM = parse('QQ+, AKs, AKo');
+const LATE_3BET = parse('JJ+, AQs+, AKo');
+const BLUFF_3BET = parse('A5s, A4s');
+const CALL_3BET = parse('JJ, TT, 99, AQs, AJs, KQs');
+const RAISE_4BET = parse('QQ+, AKs, AKo');
+const JAM_5BET = parse('KK+, AKs');
+const CALL_4BET = parse('QQ, AKo');
 
 export function handCode(cards: string[]): string {
   const [a, b] = [...cards].sort((x, y) => rv(y[0]) - rv(x[0]));
@@ -57,66 +80,64 @@ export function positions(v: View): Record<number, string> {
   return out;
 }
 
-// % of combos opened from each position (raise first in)
-const RFI: Record<string, number> = { UTG: 12, 'UTG+1': 14, MP: 17, LJ: 20, HJ: 24, CO: 29, BTN: 45, SB: 38, BB: 100 };
-
 export type Freqs = Partial<Record<'fold' | 'check' | 'call' | 'raise', number>>;
 export interface PreflopAdvice { freqs: Freqs; raiseToBB: number; pos: string; code: string; spot: string }
-
-/** band: 100% if pct <= t - w, 50% inside the band, 0% beyond */
-const band = (pct: number, t: number, w = 2) => (pct <= t - w ? 100 : pct <= t + w ? 50 : 0);
 
 export function preflopAdvice(v: View): PreflopAdvice | null {
   const h = v.hand; const me = v.you;
   if (!h || me === null || h.street !== 'preflop') return null;
   const seat = v.seats[me]; if (!seat.holeCards) return null;
-  const pos = positions(v)[me] ?? 'MP';
-  const code = handCode(seat.holeCards); const pct = PCT.get(code) ?? 100;
+  const pmap = positions(v);
+  const pos = pmap[me] ?? 'MP';
+  const code = handCode(seat.holeCards); const tier = tierOf(code);
   const bb = v.table.bigBlind;
   const acts = h.history.filter((a) => a.street === 'preflop' && a.action !== 'sb' && a.action !== 'bb' && a.action !== 'ante');
   const raises = acts.filter((a) => a.action === 'raise' || a.action === 'bet');
   const limpers = raises.length === 0 ? acts.filter((a) => a.action === 'call').length : 0;
   const canCheck = v.legalActions.some((l) => l.action === 'check');
-  const passive: 'check' | 'fold' = canCheck ? 'check' : 'fold';
-  let raise = 0, call = 0, spot: string, raiseToBB: number;
   const toBB = (x: number) => x / bb;
+  let raise = 0, call = 0, spot: string, raiseToBB: number;
+  const ip = pos !== 'SB' && pos !== 'BB';
 
   if (raises.length === 0) {
     spot = limpers ? `${limpers} limper(s)` : 'unopened';
-    raise = band(pct, pos === 'BB' ? 14 : (RFI[pos] ?? 20) * (limpers ? 0.7 : 1));
-    if (pos === 'SB' && !limpers && raise < 100) call = (band(pct, 55) * (100 - raise)) / 100; // SB completes some
-    raiseToBB = 2.5 + limpers + (pos === 'SB' || pos === 'BB' ? 0.5 : 0);
+    if (pos === 'BB') raise = tier <= 3 ? 100 : 0;                                   // iso-raise limpers with strong hands, else check
+    else if (pos === 'SB' && !limpers) raise = SB_SET.has(code) ? 100 : 0;
+    else raise = tier <= Math.max(1, POS_TIER[pos] - (limpers ? 1 : 0)) ? 100 : 0;   // iso-raise a bit tighter over limpers
+    raiseToBB = 2.5 + limpers + (ip ? 0 : 0.5);
   } else if (raises.length === 1) {
     spot = 'facing an open';
-    const openerPos = positions(v)[raises[0].seat] ?? 'MP';
-    const openerRange = RFI[openerPos] ?? 20;
-    const threeBet = Math.max(3, openerRange * 0.22);
-    const callWidth = pos === 'BB' ? openerRange * 1.1 : pos === 'SB' ? 0 : pos === 'BTN' || pos === 'CO' ? openerRange * 0.55 : openerRange * 0.4;
-    raise = band(pct, threeBet, 1);
-    call = raise === 100 ? 0 : band(pct, threeBet + callWidth) * (100 - raise) / 100;
-    const ip = pos !== 'SB' && pos !== 'BB';
+    const openerTier = POS_TIER[pmap[raises[0].seat] ?? 'MP'] ?? 3;
+    const late = openerTier >= 4;
+    if ((late ? LATE_3BET : PREMIUM).has(code)) raise = 100;
+    else if (BLUFF_3BET.has(code)) raise = late ? 50 : 30;
+    if (raise < 100) {
+      const callOk = pos === 'BB' ? tier <= openerTier + 1 : pos === 'SB' ? false : tier <= Math.max(1, openerTier - 1) || (ip && /^(\w)\1$/.test(code));
+      if (callOk) call = 100 - raise;
+    }
     raiseToBB = toBB(raises[0].to ?? bb * 2.5) * (ip ? 3 : 4);
   } else if (raises.length === 2) {
     spot = 'facing a 3-bet';
-    raise = band(pct, 2.5, 0.6);
-    call = raise === 100 ? 0 : band(pct, 5, 1) * (100 - raise) / 100;
+    if (RAISE_4BET.has(code)) raise = 100;
+    else if (BLUFF_3BET.has(code)) raise = 25;
+    if (raise < 100 && CALL_3BET.has(code)) call = 100 - raise;
     raiseToBB = toBB(raises[1].to ?? bb * 9) * 2.3;
   } else {
     spot = 'facing a 4-bet+';
-    raise = band(pct, 1.5, 0.3);
-    call = raise === 100 ? 0 : band(pct, 3, 0.6) * (100 - raise) / 100;
+    if (JAM_5BET.has(code)) raise = 100;
+    else if (CALL_4BET.has(code)) call = 100;
     raiseToBB = 999; // jam
   }
   const freqs: Freqs = {};
   const hasRaise = v.legalActions.some((l) => l.action === 'raise' || l.action === 'bet');
   const hasCall = v.legalActions.some((l) => l.action === 'call');
-  let r = hasRaise ? Math.round(raise) : 0;
-  let c = hasCall ? Math.round(call) : 0;
-  if (!hasRaise && raise) c = Math.min(100, c + Math.round(raise)); // can't raise (short all-in): call instead
+  let r = hasRaise ? raise : 0;
+  let c = hasCall ? call : 0;
+  if (!hasRaise && raise) c = Math.min(100, c + raise); // can't raise (short all-in): call instead
   if (r) freqs.raise = r;
   if (c) freqs.call = c;
   const rest = 100 - r - c;
-  if (rest > 0) freqs[passive] = rest;
+  if (rest > 0) freqs[canCheck ? 'check' : 'fold'] = rest;
   return { freqs, raiseToBB, pos, code, spot };
 }
 
