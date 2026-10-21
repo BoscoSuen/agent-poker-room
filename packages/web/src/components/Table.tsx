@@ -186,7 +186,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
                     <div class="stack">{s.stack === 0 && s.inHand ? 'ALL-IN' : fmt(s.stack)}{pos[s.idx] ? <span class="posi"> · {pos[s.idx]}</span> : null}</div>
                     {pos[s.idx] ? <div class="posn">({pos[s.idx]})</div> : null}
                     <div class="sub">{!s.connected && s.kind === 'human' ? <span class="dc">disconnected</span> : s.sittingOut ? 'sitting out' : winners.has(s.idx) && h?.done ? <span class="ok">+{fmt(winAmount(s.idx))}</span> : s.lastAction ? s.lastAction.replace(/(\d+)$/, (m) => fmt(Number(m))) : ''}</div>
-                    {mobile && s.isDealer ? <div class={`dseat ${p.x <= 50 ? 'r' : 'l'}`}>D</div> : null}
+                    {mobile && s.isDealer ? <div class={`dseat ${isYou ? 'l' : p.x <= 50 ? 'r' : 'l'}`}>D</div> : null}
                     {isYou && showHint ? <button class={`hintbtn ${hintOpen && hint?.data ? 'open' : ''}`} onClick={(e) => { e.stopPropagation(); if (hintOpen && !hint?.err) setHintOpen(false); else askHint(); }}>
                       {!hintOpen ? 'Hint' : hint?.loading ? 'Thinking…' : hint?.data ? hintText(hint.data) : hint?.err ? 'Hint failed · retry' : 'Hint'}
                     </button> : null}

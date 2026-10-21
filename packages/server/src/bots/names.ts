@@ -7,7 +7,7 @@ export const BOT_LIST: string[] = [
   // 人民的名义
   '侯亮平', '李达康', '高育良', '祁同伟', '沙瑞金',
   // 大明王朝1566
-  '嘉靖', '海瑞', '严嵩', '严世蕃', '徐阶', '胡宗宪', '高拱', '张居正', '吕芳', '杨金水'
+  '嘉靖', '海瑞', '严嵩', '严世蕃', '徐阶', '胡宗宪', '高拱', '张居正', '沈一石', '杨金水'
 ];
 
 /** Canned table talk per persona. LLM personas normally write their own line; these are fallbacks when the model stays quiet or its line is filtered. */

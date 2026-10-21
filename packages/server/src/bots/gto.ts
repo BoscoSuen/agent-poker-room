@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { log } from '../log.js';
 import { chat, extractJson, safeNote } from './llm.js';
 import { describeView, sanitize, type Decision, type PersonaAgent } from './types.js';
+import { preflopAdvice, samplePreflop, positions } from './preflop.js';
 
 /**
  * Map a 9-max view onto PokerSkill's heads-up (BTN/BB) state:
@@ -60,6 +61,15 @@ export function toPokerSkillState(v: View) {
   return { state, villainIdx };
 }
 
+/** Real 9-max context appended to PokerSkill's heads-up prompt. */
+function contextLine(v: View): string {
+  const pos = positions(v); const me = v.you!;
+  const live = v.seats.filter((s) => s.inHand && !s.folded).length;
+  const pfr = [...v.hand!.history].reverse().find((a) => a.street === 'preflop' && (a.action === 'raise' || a.action === 'bet'));
+  const pfrText = pfr ? (pfr.seat === me ? 'you' : `${pos[pfr.seat] ?? 'seat ' + pfr.seat}`) : 'nobody (limped pot)';
+  return `Real spot: ${live}-handed pot at a 9-max table; you are ${pos[me] ?? '?'}; preflop raiser: ${pfrText}.`;
+}
+
 /** Ask the PokerSkill sidecar for its prompts for this spot (empty strings if unavailable). */
 async function pokerSkillPrompts(v: View, signal: AbortSignal): Promise<{ system: string; user: string }> {
   const { state } = toPokerSkillState(v);
@@ -79,9 +89,11 @@ export interface Hint { freqs: { action: string; pct: number }[]; raiseTo?: numb
 /** GTO hint for a human: action frequencies over the legal actions, from the same PokerSkill prompts the GTO agent uses. */
 export async function gtoHint(v: View, signal: AbortSignal): Promise<Hint> {
   const legal = v.legalActions; const bb = v.table.bigBlind;
+  const pre = preflopAdvice(v);
+  if (pre) return { freqs: Object.entries(pre.freqs).map(([action, pct]) => ({ action, pct: pct! })).sort((a, b) => b.pct - a.pct), source: `chart:${pre.pos}:${pre.code}:${pre.spot}` };
   const names = [...new Set(legal.map((l) => (l.action === 'bet' ? 'raise' : l.action)))];
   const { system, user } = await pokerSkillPrompts(v, signal);
-  const ask = `\n\nThis is actually a ${v.seats.filter((s) => s.inHand && !s.folded).length}-handed pot at a 9-max table.\nOUTPUT FORMAT (overrides any format above): do not pick one action. Give the mixed-strategy frequency in percent for each of: ${names.join(', ')}; they sum to 100. Respond with ONLY JSON, e.g. {${names.map((n, i) => `"${n}": ${i === 0 ? 60 : Math.floor(40 / Math.max(1, names.length - 1))}`).join(', ')}}.`;
+  const ask = `\n\n${contextLine(v)}\nOUTPUT FORMAT (overrides any format above): do not pick one action. Give the mixed-strategy frequency in percent for each of: ${names.join(', ')}; they sum to 100. Respond with ONLY JSON, e.g. {${names.map((n, i) => `"${n}": ${i === 0 ? 60 : Math.floor(40 / Math.max(1, names.length - 1))}`).join(', ')}}.`;
   // PokerSkill's user prompt ends with its own single-action JSON request; drop it so the frequency format wins
   const userBody = user.replace(/What is your action\?[\s\S]*$/i, '').trimEnd();
   const msgs = system && user
@@ -110,11 +122,17 @@ export const gtoAgent: PersonaAgent = {
   async decide(v: View, signal: AbortSignal): Promise<Decision> {
     const legal = v.legalActions;
     const bb = v.table.bigBlind;
+    const pre = preflopAdvice(v);
+    if (pre) {
+      const a = samplePreflop(pre);
+      const d = sanitize({ action: a, amount: a === 'raise' ? Math.round(pre.raiseToBB * bb) : undefined }, legal);
+      if (d) { d.source = `chart:${pre.pos}:${pre.code}`; return d; }
+    }
     const { system, user } = await pokerSkillPrompts(v, signal);
     const t0 = Date.now();
     let d: Decision | null = null;
     if (system && user) {
-      const note = `\n\nNOTE: this is actually a ${v.seats.filter((s) => s.inHand && !s.folded).length}-handed pot at a 9-max table; the heads-up framing above treats the main opponent as "villain". Amounts in the JSON must be in BB units as "bet/raise TO" sizes. Also add a "note" field: optional public table talk in 简体中文 (max 15 characters) that must NOT reveal or hint at your cards, hand strength or reasoning.`;
+      const note = `\n\nNOTE: ${contextLine(v)} The heads-up framing above treats the main opponent as "villain". Amounts in the JSON must be in BB units as "bet/raise TO" sizes. Also add a "note" field: optional public table talk in 简体中文 (max 15 characters) that must NOT reveal or hint at your cards, hand strength or reasoning.`;
       const { text } = await chat([{ role: 'system', content: system }, { role: 'user', content: user + note }], signal, { maxTokens: 400 });
       const p = extractJson(text);
       if (p) {
