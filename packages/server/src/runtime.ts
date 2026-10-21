@@ -346,6 +346,7 @@ export function parseTableConfig(input: any): Partial<TableConfig> {
   out.autoFillTo = num(input?.autoFillTo, 7, 2, 9);
   out.maxSeats = num(input?.maxSeats, 9, 2, 9);
   out.showdownMs = num(input?.showdownSec, 5, 1, 30) * 1000;
+  out.hintsEnabled = input?.hintsEnabled === true;
   if (Array.isArray(input?.botPersonas) && input.botPersonas.length) {
     const ok = ['default', 'aggressive', 'weak', 'gto'];
     out.botPersonas = input.botPersonas.filter((p: any) => ok.includes(p));

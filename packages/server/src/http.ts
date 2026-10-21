@@ -4,6 +4,9 @@ import { games, createGame } from './registry.js';
 import { config } from './config.js';
 import { stats } from './bots/runner.js';
 import type { Persona } from '@pokergarden/engine';
+import { gtoHint, type Hint } from './bots/gto.js';
+
+const hintCache = new Map<string, Promise<Hint>>(); // decisionId -> hint (one LLM call per decision)
 
 export const app = new Hono();
 app.use('*', cors({ origin: (o) => o, credentials: false, allowHeaders: ['content-type', 'x-host-key', 'x-admin-key', 'authorization'] }));
@@ -53,6 +56,28 @@ app.post('/games/:id/leave', async (c) => {
   if (!g.rt.resolve(token)) return c.json({ error: 'bad_token', message: 'seat token not recognised' }, 400);
   g.rt.leave(token);
   return c.json({ ok: true });
+});
+
+/** GTO hint for the requesting seat, only on its own turn and only if the table allows hints. Uses only that seat's view. */
+app.post('/games/:id/hint', async (c) => {
+  const g = getGame(c.req.param('id'));
+  if (!g) return c.json({ error: 'not_found' }, 404);
+  if (!g.rt.table.config.hintsEnabled) return c.json({ error: 'disabled', message: 'Hints are off for this table.' }, 403);
+  const body = await c.req.json().catch(() => ({}));
+  const st = g.rt.resolve(String(body.token ?? ''));
+  if (!st) return c.json({ error: 'bad_token' }, 400);
+  const v = g.rt.view(st.seatIdx);
+  if (!v.hand || v.hand.actionOn !== st.seatIdx) return c.json({ error: 'not_your_turn' }, 400);
+  const key = `${g.rt.id}:${v.hand.decisionId}`;
+  let p = hintCache.get(key);
+  if (!p) {
+    p = gtoHint(v, AbortSignal.timeout(20_000));
+    hintCache.set(key, p);
+    p.catch(() => hintCache.delete(key));
+    if (hintCache.size > 500) hintCache.delete(hintCache.keys().next().value!);
+  }
+  try { return c.json({ decisionId: v.hand.decisionId, ...(await p) }); }
+  catch (e: any) { return c.json({ error: 'hint_failed', message: String(e.message ?? e).slice(0, 120) }, 502); }
 });
 
 app.get('/games/:id/view', (c) => {

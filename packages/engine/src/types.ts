@@ -17,6 +17,7 @@ export interface TableConfig {
   autoFillTo: number;      // bots fill empty seats up to this many players (7)
   showdownMs: number;      // pause after hand ends before next hand
   botPersonas: Persona[];  // personas used when auto-filling (cycled)
+  hintsEnabled: boolean;   // players may ask for a GTO hint on their turn
 }
 
 export const DEFAULT_CONFIG: TableConfig = {
@@ -31,6 +32,7 @@ export const DEFAULT_CONFIG: TableConfig = {
   autoFillTo: 7,
   showdownMs: 5_000,
   botPersonas: ['default', 'aggressive', 'weak', 'gto'],
+  hintsEnabled: false,
 };
 
 export interface Player {

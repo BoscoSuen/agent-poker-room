@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { View } from '@pokergarden/engine';
-import { EngineClient, engineJoin, engineLeave, hostCall, type EngineState } from '../engine';
+import { EngineClient, engineJoin, engineLeave, engineHint, hostCall, type EngineState, type Hint } from '../engine';
 import { Card } from './Card';
 
 type Props = { client: EngineClient; es: EngineState; hostKey: string | null; gameId: string; api: string; onToken: (t: string | null) => void };
@@ -70,6 +70,28 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
   // re-render while chat bubbles are fading
   useEffect(() => { const t = setInterval(() => force((x) => x + 1), 1000); const stop = setTimeout(() => clearInterval(t), 9000); return () => { clearInterval(t); clearTimeout(stop); }; }, [es.chat.length]);
   const pos = positions(v);
+  const [hintsOn, setHintsOn] = useState(loadSettings().hints);
+  useEffect(() => { const on = () => setHintsOn(loadSettings().hints); window.addEventListener('pg-settings', on); return () => window.removeEventListener('pg-settings', on); }, []);
+  const [hint, setHint] = useState<{ id: string; loading?: boolean; data?: Hint; err?: string } | null>(null);
+  const [hintOpen, setHintOpen] = useState(false);
+  const myTurn = you !== null && !!v.hand && v.hand.actionOn === you && v.legalActions.length > 0;
+  const showHint = myTurn && v.table.hintsEnabled && hintsOn && !!client.token;
+  useEffect(() => { if (hint && hint.id !== v.hand?.decisionId) { setHint(null); setHintOpen(false); } }, [v.hand?.decisionId]);
+  // any tap outside the hint button hides it (the result stays cached for this decision)
+  useEffect(() => {
+    if (!hintOpen) return;
+    const off = (e: Event) => { if (!(e.target as HTMLElement)?.closest?.('.hintbtn')) setHintOpen(false); };
+    document.addEventListener('pointerdown', off, true);
+    return () => document.removeEventListener('pointerdown', off, true);
+  }, [hintOpen]);
+  const askHint = async () => {
+    const id = v.hand!.decisionId;
+    setHintOpen(true);
+    if (hint && hint.id === id && (hint.data || hint.loading)) return; // already thought about this spot
+    setHint({ id, loading: true });
+    try { const d = await engineHint(api, gameId, client.token!); setHint({ id, data: d }); } catch (e: any) { setHint({ id, err: e.message }); }
+  };
+  const hintText = (d: Hint) => d.freqs.map((f) => `${f.pct}% ${f.action}`).join(' · ');
   // action flash: latest history entry -> 1.2 s highlight on that seat (chip slide + label)
   const lastAct = v.hand?.history[v.hand.history.length - 1];
   const [flash, setFlash] = useState<{ seat: number; action: string; to: number; key: string } | null>(null);
@@ -165,6 +187,9 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
                     {pos[s.idx] ? <div class="posn">({pos[s.idx]})</div> : null}
                     <div class="sub">{!s.connected && s.kind === 'human' ? <span class="dc">disconnected</span> : s.sittingOut ? 'sitting out' : winners.has(s.idx) && h?.done ? <span class="ok">+{fmt(winAmount(s.idx))}</span> : s.lastAction ? s.lastAction.replace(/(\d+)$/, (m) => fmt(Number(m))) : ''}</div>
                     {mobile && s.isDealer ? <div class={`dseat ${p.x <= 50 ? 'r' : 'l'}`}>D</div> : null}
+                    {isYou && showHint ? <button class={`hintbtn ${hintOpen && hint?.data ? 'open' : ''}`} onClick={(e) => { e.stopPropagation(); if (hintOpen && !hint?.err) setHintOpen(false); else askHint(); }}>
+                      {!hintOpen ? 'Hint' : hint?.loading ? 'Thinking…' : hint?.data ? hintText(hint.data) : hint?.err ? 'Hint failed · retry' : 'Hint'}
+                    </button> : null}
                     {acting ? <div class={`timer ${bank ? 'bank' : ''}`}><i style={{ transform: `scaleX(${frac})` }} /></div> : null}
                     {hostKey && s.kind === 'bot' && s.stack === 0 && !(h && s.inHand && !h.done) ? <div class="busted" onClick={(e) => e.stopPropagation()}>
                       <button onClick={() => hostCall(api, gameId, hostKey, 'add_chips', { seat: s.idx, amount: v.table.defaultStack }).catch(() => {})}>Load</button>
@@ -416,14 +441,14 @@ function HostPanel({ v, hostKey, gameId, api }: { v: View; hostKey: string; game
 
 // ---- settings (per device, localStorage) ----
 export const SETTINGS_KEY = 'pg:settings';
-export interface Settings { size: 'S' | 'M' | 'L' | 'XL'; font: 'sans' | 'serif' | 'mono' }
+export interface Settings { size: 'S' | 'M' | 'L' | 'XL'; font: 'sans' | 'serif' | 'mono'; hints: boolean }
 const SIZES: Record<Settings['size'], number> = { S: 0.9, M: 1, L: 1.12, XL: 1.25 };
 const FONTS: Record<Settings['font'], string> = {
   sans: '"Instrument Sans", "Archivo", system-ui, -apple-system, sans-serif',
   serif: '"Iowan Old Style", "Palatino", Georgia, "Noto Serif SC", serif',
   mono: '"JetBrains Mono", ui-monospace, Menlo, monospace',
 };
-export function loadSettings(): Settings { try { return { size: 'M', font: 'sans', ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return { size: 'M', font: 'sans' }; } }
+export function loadSettings(): Settings { try { return { size: 'M', font: 'sans', hints: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return { size: 'M', font: 'sans', hints: true }; } }
 export function applySettings(st: Settings) {
   const root = document.documentElement;
   root.style.setProperty('--font', FONTS.sans);
@@ -431,10 +456,12 @@ export function applySettings(st: Settings) {
 }
 function SettingsPanel() {
   const [st, setSt] = useState<Settings>(loadSettings());
-  const update = (p: Partial<Settings>) => { const n = { ...st, ...p }; setSt(n); try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(n)); } catch { /* ignore */ } applySettings(n); };
+  const update = (p: Partial<Settings>) => { const n = { ...st, ...p }; setSt(n); try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(n)); } catch { /* ignore */ } applySettings(n); window.dispatchEvent(new Event('pg-settings')); };
   return (
     <div class="body host">
       <div class="sec"><h4>Text size</h4><div class="personas">{(['S', 'M', 'L', 'XL'] as const).map((k) => <button class={st.size === k ? 'on' : ''} onClick={() => update({ size: k })}>{k}</button>)}</div></div>
+      <div class="sec"><h4>GTO hints</h4><label class="switch"><input type="checkbox" checked={st.hints} onChange={(e) => update({ hints: (e.target as HTMLInputElement).checked })} /> {st.hints ? 'Show hint button' : 'Hidden'}</label>
+        <p class="muted" style="font-size:12px;margin:4px 0 0">Only works on tables created with GTO hints on.</p></div>
       <p class="muted" style="font-size:12px">Saved on this device only.</p>
     </div>
   );

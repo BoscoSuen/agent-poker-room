@@ -58,6 +58,13 @@ export async function engineLeave(api: string, gameId: string, token: string): P
   const data: any = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.message ?? data.error ?? 'leave failed');
 }
+export interface Hint { decisionId: string; freqs: { action: string; pct: number }[]; raiseTo?: number }
+export async function engineHint(api: string, gameId: string, token: string): Promise<Hint> {
+  const res = await fetch(`${api}/games/${gameId}/hint`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
+  const data: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message ?? data.error ?? 'hint failed');
+  return data;
+}
 export async function engineInfo(api: string, gameId: string, hostKey?: string | null) {
   const res = await fetch(`${api}/games/${gameId}`, { headers: hostKey ? { 'x-host-key': hostKey } : {} });
   if (!res.ok) throw new Error(`engine ${res.status}`);

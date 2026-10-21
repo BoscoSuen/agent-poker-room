@@ -60,21 +60,49 @@ export function toPokerSkillState(v: View) {
   return { state, villainIdx };
 }
 
+/** Ask the PokerSkill sidecar for its prompts for this spot (empty strings if unavailable). */
+async function pokerSkillPrompts(v: View, signal: AbortSignal): Promise<{ system: string; user: string }> {
+  const { state } = toPokerSkillState(v);
+  try {
+    const res = await fetch(`${config.pokerskillUrl}/prompt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(state), signal });
+    if (!res.ok) throw new Error(`pokerskill http ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const j: any = await res.json();
+    return { system: j.system_prompt, user: j.user_prompt };
+  } catch (e) {
+    log('gto', 'pokerskill sidecar unavailable', { e: String(e).slice(0, 200) });
+    return { system: '', user: '' };
+  }
+}
+
+export interface Hint { freqs: { action: string; pct: number }[]; raiseTo?: number; source: string }
+
+/** GTO hint for a human: action frequencies over the legal actions, from the same PokerSkill prompts the GTO agent uses. */
+export async function gtoHint(v: View, signal: AbortSignal): Promise<Hint> {
+  const legal = v.legalActions; const bb = v.table.bigBlind;
+  const names = [...new Set(legal.map((l) => (l.action === 'bet' ? 'raise' : l.action)))];
+  const { system, user } = await pokerSkillPrompts(v, signal);
+  const ask = `\n\nNOTE: this is actually a ${v.seats.filter((s) => s.inHand && !s.folded).length}-handed pot at a 9-max table. Do not pick one action. Respond with ONLY JSON giving the mixed-strategy frequency (percent, summing to 100) for each of: ${names.join(', ')}; plus "raise_to" in BB if raise > 0. Example: {"call": 70, "fold": 30}.`;
+  const msgs = system && user
+    ? [{ role: 'system' as const, content: system }, { role: 'user' as const, content: user + ask }]
+    : [{ role: 'system' as const, content: 'You are a GTO No-Limit Hold\'em coach.' }, { role: 'user' as const, content: describeView(v) + ask }];
+  const { text } = await chat(msgs, signal, { maxTokens: 300 });
+  const p = extractJson(text) ?? {};
+  let freqs = names.map((n) => ({ action: n, pct: Math.max(0, Number(p[n] ?? (n === 'raise' ? p.bet : 0)) || 0) }));
+  const sum = freqs.reduce((a, f) => a + f.pct, 0);
+  if (sum <= 0) throw new Error('hint: unparseable');
+  freqs = freqs.map((f) => ({ ...f, pct: Math.round((100 * f.pct) / sum) })).filter((f) => f.pct > 0).sort((a, b) => b.pct - a.pct);
+  const br = legal.find((l) => l.action === 'bet' || l.action === 'raise');
+  const rt = Number(p.raise_to ?? p.raise_to_bb);
+  const raiseTo = br && freqs.some((f) => f.action === 'raise') && Number.isFinite(rt) ? Math.min(br.max!, Math.max(br.min!, Math.round(rt * bb))) : undefined;
+  return { freqs, raiseTo, source: system ? 'pokerskill+llm' : 'llm' };
+}
+
 export const gtoAgent: PersonaAgent = {
   name: 'gto',
   async decide(v: View, signal: AbortSignal): Promise<Decision> {
     const legal = v.legalActions;
     const bb = v.table.bigBlind;
-    const { state } = toPokerSkillState(v);
-    let system = '', user = '';
-    try {
-      const res = await fetch(`${config.pokerskillUrl}/prompt`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(state), signal });
-      if (!res.ok) throw new Error(`pokerskill http ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      const j: any = await res.json();
-      system = j.system_prompt; user = j.user_prompt;
-    } catch (e) {
-      log('gto', 'pokerskill sidecar unavailable, falling back to plain prompt', { e: String(e).slice(0, 200) });
-    }
+    const { system, user } = await pokerSkillPrompts(v, signal);
     const t0 = Date.now();
     let d: Decision | null = null;
     if (system && user) {
