@@ -8,19 +8,20 @@ import { RANKS, type View } from '@pokergarden/engine';
 const rv = (c: string) => RANKS.indexOf(c) + 2;
 
 /**
- * Raise-first-in ranges for 9-max, 100bb, written like a standard chart. Each position also opens everything from
- * the tighter positions. Parsed once into a "tier": the tightest position that opens the hand (1 = UTG ... 7 = BTN, 9 = never).
+ * Raise-first-in ranges for 9-max cash, 100bb, from pokerspot.gg/poker-preflop-chart (majority action per hand).
+ * Their seats UTG, UTG+1, UTG+2, MP map to ours UTG, UTG+1, MP, LJ. A hand's "tier" is the tightest position that opens it
+ * (1 = UTG ... 7 = BTN, 9 = never); it is reused to size calling ranges against an open.
  */
 const RFI_RANGES: [string, string][] = [
-  ['UTG', '77+, ATs+, A5s, KTs+, QTs+, JTs, AJo+, KQo'],
-  ['UTG+1', '66+, A9s+, A4s, T9s'],
-  ['MP', '55+, A8s+, A3s, A2s, K9s, Q9s, J9s, 98s, ATo, KJo'],
-  ['LJ', '44+, A7s, A6s, T8s, 87s, QJo'],
-  ['HJ', '33+, K8s, J8s, 97s, 76s, A9o, KTo, QTo, JTo'],
-  ['CO', '22+, K7s, K6s, K5s, Q8s, T7s, 86s, 75s, 65s, 54s, A8o, K9o, Q9o, J9o, T9o'],
-  ['BTN', 'K4s, K3s, K2s, Q7s, Q6s, Q5s, Q4s, J7s, J6s, T6s, 96s, 85s, 74s, 64s, 53s, 43s, A7o, A6o, A5o, A4o, A3o, A2o, K8o, Q8o, J8o, T8o, 98o, 97o, 87o, 76o'],
+  ['UTG', '77+, ATs+, A5s, KJs+, QJs, JTs, AQo+, KQo'],
+  ['UTG+1', '77+, ATs+, A5s, KJs+, QJs, JTs, AJo+, KQo'],
+  ['MP', '77+, ATs+, A5s, A4s, KTs+, QJs, JTs, AJo+, KQo'],
+  ['LJ', '77+, ATs+, A5s, A4s, KTs+, QTs+, JTs, T9s, AJo+, KQo'],
+  ['HJ', '55+, A2s+, K9s+, Q9s+, J9s+, T8s+, 98s, 87s, 76s, 65s, ATo+, KJo+, QJo'],
+  ['CO', '22+, A2s+, K7s+, Q8s+, J8s+, T7s+, 97s+, 86s+, 75s+, 64s+, 53s+, 43s, A9o+, K9o+, Q9o+, J9o+, T9o'],
+  ['BTN', '22+, A2s+, K2s+, Q5s+, J6s+, T6s+, 96s+, 85s+, 74s+, 63s+, 53s+, 43s, A4o+, K8o+, Q9o+, J9o+, T9o, 97o+, 86o+, 75o+, 65o'],
 ];
-const SB_RANGE = '22+, A2s+, K4s+, Q6s+, J7s+, T7s+, 97s+, 86s+, 75s+, 65s, 54s, A5o+, K9o+, Q9o+, J9o+, T9o';
+const SB_RANGE = '22+, A2s+, K6s+, Q7s+, J7s+, T7s+, 96s+, 85s+, 75s+, 64s+, 53s+, 43s, A5o+, K9o+, Q9o+, J9o+, T8o+, 98o, 87o, 76o';
 const ORDER = 'AKQJT98765432';
 
 function expand(token: string): string[] {
@@ -50,6 +51,7 @@ const tierOf = (code: string) => TIER.get(code) ?? 9;
 const PREMIUM = parse('QQ+, AKs, AKo');
 const LATE_3BET = parse('JJ+, AQs+, AKo');
 const BLUFF_3BET = parse('A5s, A4s');
+const CALL_VS_EARLY = parse('JJ, TT, 99, 88, 77, 66, 55, 44, 33, 22, AQs, AJs, KQs, AQo');
 const CALL_3BET = parse('JJ, TT, 99, AQs, AJs, KQs');
 const RAISE_4BET = parse('QQ+, AKs, AKo');
 const JAM_5BET = parse('KK+, AKs');
@@ -112,7 +114,7 @@ export function preflopAdvice(v: View): PreflopAdvice | null {
     if ((late ? LATE_3BET : PREMIUM).has(code)) raise = 100;
     else if (BLUFF_3BET.has(code)) raise = late ? 50 : 30;
     if (raise < 100) {
-      const callOk = pos === 'BB' ? tier <= openerTier + 1 : pos === 'SB' ? false : tier <= Math.max(1, openerTier - 1) || (ip && /^(\w)\1$/.test(code));
+      const callOk = pos === 'BB' ? tier <= openerTier + 1 : pos === 'SB' ? false : openerTier <= 2 ? CALL_VS_EARLY.has(code) : tier < openerTier || /^(\w)\1$/.test(code);
       if (callOk) call = 100 - raise;
     }
     raiseToBB = toBB(raises[0].to ?? bb * 2.5) * (ip ? 3 : 4);
