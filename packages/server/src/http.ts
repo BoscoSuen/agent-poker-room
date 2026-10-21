@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { games, createGame } from './registry.js';
 import { config } from './config.js';
 import { stats } from './bots/runner.js';
+import { log } from './log.js';
 import type { Persona } from '@pokergarden/engine';
 import { gtoHint, type Hint } from './bots/gto.js';
 
@@ -77,7 +78,7 @@ app.post('/games/:id/hint', async (c) => {
     if (hintCache.size > 500) hintCache.delete(hintCache.keys().next().value!);
   }
   try { return c.json({ decisionId: v.hand.decisionId, ...(await p) }); }
-  catch (e: any) { return c.json({ error: 'hint_failed', message: String(e.message ?? e).slice(0, 120) }, 502); }
+  catch (e: any) { log('hint', 'failed', { e: String(e.message ?? e).slice(0, 200) }); return c.json({ error: 'hint_failed', message: String(e.message ?? e).slice(0, 120) }, 502); }
 });
 
 app.get('/games/:id/view', (c) => {

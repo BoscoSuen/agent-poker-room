@@ -81,12 +81,20 @@ export async function gtoHint(v: View, signal: AbortSignal): Promise<Hint> {
   const legal = v.legalActions; const bb = v.table.bigBlind;
   const names = [...new Set(legal.map((l) => (l.action === 'bet' ? 'raise' : l.action)))];
   const { system, user } = await pokerSkillPrompts(v, signal);
-  const ask = `\n\nNOTE: this is actually a ${v.seats.filter((s) => s.inHand && !s.folded).length}-handed pot at a 9-max table. Do not pick one action. Respond with ONLY JSON giving the mixed-strategy frequency (percent, summing to 100) for each of: ${names.join(', ')}; plus "raise_to" in BB if raise > 0. Example: {"call": 70, "fold": 30}.`;
+  const ask = `\n\nThis is actually a ${v.seats.filter((s) => s.inHand && !s.folded).length}-handed pot at a 9-max table.\nOUTPUT FORMAT (overrides any format above): do not pick one action. Give the mixed-strategy frequency in percent for each of: ${names.join(', ')}; they sum to 100. Respond with ONLY JSON, e.g. {${names.map((n, i) => `"${n}": ${i === 0 ? 60 : Math.floor(40 / Math.max(1, names.length - 1))}`).join(', ')}}.`;
+  // PokerSkill's user prompt ends with its own single-action JSON request; drop it so the frequency format wins
+  const userBody = user.replace(/What is your action\?[\s\S]*$/i, '').trimEnd();
   const msgs = system && user
-    ? [{ role: 'system' as const, content: system }, { role: 'user' as const, content: user + ask }]
+    ? [{ role: 'system' as const, content: system }, { role: 'user' as const, content: userBody + ask }]
     : [{ role: 'system' as const, content: 'You are a GTO No-Limit Hold\'em coach.' }, { role: 'user' as const, content: describeView(v) + ask }];
   const { text } = await chat(msgs, signal, { maxTokens: 300 });
   const p = extractJson(text) ?? {};
+  // model ignored the format and named one action: treat it as 100% of that action
+  if (typeof p.action === 'string' && !names.some((n) => p[n] !== undefined)) {
+    const map: Record<string, string> = { f: 'fold', k: 'check', c: 'call', b: 'raise', bet: 'raise' };
+    const a = map[p.action.toLowerCase()] ?? p.action.toLowerCase();
+    if ((names as string[]).includes(a)) p[a] = 100;
+  }
   let freqs = names.map((n) => ({ action: n, pct: Math.max(0, Number(p[n] ?? (n === 'raise' ? p.bet : 0)) || 0) }));
   const sum = freqs.reduce((a, f) => a + f.pct, 0);
   if (sum <= 0) throw new Error('hint: unparseable');
