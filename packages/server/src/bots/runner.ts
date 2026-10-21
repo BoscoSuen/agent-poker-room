@@ -6,7 +6,7 @@ import { fishAgent } from './fish.js';
 import { makeLlmAgent } from './llm.js';
 import { gtoAgent } from './gto.js';
 import type { PersonaAgent, Decision } from './types.js';
-import { TALK } from './names.js';
+import { TALK, GROUP_TALK, groupOf } from './names.js';
 
 export const AGENTS: Record<Persona, PersonaAgent> = {
   weak: fishAgent,
@@ -77,8 +77,11 @@ export class BotRunner {
     try {
       this.rt.actSeat(seatIdx, d.action, d.amount, decisionId);
       const name = view.seats[seatIdx].name ?? 'bot';
-      if (d.note) this.rt.say(name, seatIdx, d.note);
-      else if (d.action !== 'fold' && Math.random() < 0.15) { const lines = TALK[persona] ?? TALK.weak; this.rt.say(name, seatIdx, lines[Math.floor(Math.random() * lines.length)]); }
+      const groupLines = GROUP_TALK[groupOf(name) ?? ''] ?? [];
+      const pickLine = (lines: string[]) => lines[Math.floor(Math.random() * lines.length)];
+      if (groupLines.length && d.action !== 'fold' && Math.random() < 0.1) this.rt.say(name, seatIdx, pickLine(groupLines)); // character catchphrase
+      else if (d.note) this.rt.say(name, seatIdx, d.note);
+      else if (d.action !== 'fold' && Math.random() < 0.15) this.rt.say(name, seatIdx, pickLine(TALK[persona] ?? TALK.weak));
     } catch (e) {
       // stale (timeout already acted) or illegal: try a safe action if still our turn
       const h = this.rt.table.hand;

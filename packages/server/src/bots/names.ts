@@ -1,14 +1,23 @@
-/** Agent display names. Picked at random, no duplicates at one table. */
-export const BOT_LIST: string[] = [
-  // Disney
-  '唐老鸭','高飞', '布鲁托', '奇奇', '蒂蒂', '小熊维尼', '跳跳虎', '史迪奇','朱迪', '尼克', '小猪佩奇',
-  // 花园宝宝
-  '依古比古', '唔西迪西', '玛卡巴卡', '汤姆布利柏', '小点点', '哈呼呼', '叮叮车', '飞飞鱼',
-  // 人民的名义
-  '侯亮平', '李达康', '高育良', '祁同伟', '沙瑞金',
-  // 大明王朝1566
-  '嘉靖', '海瑞', '严嵩', '严世蕃', '徐阶', '胡宗宪', '高拱', '张居正', '沈一石', '杨金水'
-];
+/** Agent display names, grouped by universe. Picked at random, no duplicates at one table. */
+export const BOT_GROUPS: Record<string, string[]> = {
+  disney: ['唐老鸭', '高飞', '布鲁托', '奇奇', '蒂蒂', '小熊维尼', '跳跳虎', '史迪奇', '朱迪', '尼克', '小猪佩奇'],
+  gardenBabies: ['依古比古', '唔西迪西', '玛卡巴卡', '汤姆布利柏', '小点点', '哈呼呼', '叮叮车', '飞飞鱼'], // 花园宝宝
+  inTheNameOfThePeople: ['侯亮平', '李达康', '高育良', '祁同伟', '沙瑞金'], // 人民的名义
+  mingDynasty1566: ['嘉靖', '海瑞', '严嵩', '严世蕃', '徐阶', '胡宗宪', '高拱', '张居正', '沈一石', '杨金水'], // 大明王朝1566
+};
+export const BOT_LIST: string[] = Object.values(BOT_GROUPS).flat();
+export const groupOf = (name: string): string | undefined => Object.keys(BOT_GROUPS).find((g) => BOT_GROUPS[g].includes(name));
+
+/**
+ * Table talk specific to each group (in addition to the persona lines below). Fill these in; empty lists are skipped.
+ * Lines are public chat: never hint at cards.
+ */
+export const GROUP_TALK: Record<string, string[]> = {
+  disney: [],
+  gardenBabies: [],
+  inTheNameOfThePeople: [],
+  mingDynasty1566: [],
+};
 
 /** Canned table talk per persona. LLM personas normally write their own line; these are fallbacks when the model stays quiet or its line is filtered. */
 export const WEAK_TALK: string[] = ['我跟。', '看看翻牌再说。', '这把感觉不错。', '再便宜点我就跟了。', '随便玩玩。', '运气来了挡不住。', '哎呀，手滑。', '我就看一张。', '不能总是弃吧。', '今天手气一般。'];

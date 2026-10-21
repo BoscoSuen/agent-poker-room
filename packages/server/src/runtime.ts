@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Table, viewFor, EngineError, type TableConfig, type TableEvent, type Player, type ActionType, type Persona, type View } from '@pokergarden/engine';
 import { appendJsonl, log } from './log.js';
 import { config } from './config.js';
-import { BOT_LIST } from './bots/names.js';
+import { BOT_GROUPS } from './bots/names.js';
 import { Reads } from './reads.js';
 
 const DISCONNECT_GRACE_MS = 3_000;   // disconnected human on action: auto check/fold after 3 s
@@ -125,10 +125,11 @@ export class GameRuntime {
     this.maybeStartHand();
     return st;
   }
-  addBot(persona: Persona, seatIdx?: number): SeatToken {
+  /** Add one agent. With `group`, the name comes from that group if it still has a free name. */
+  addBot(persona: Persona, seatIdx?: number, group?: string): SeatToken {
     const used = new Set(this.table.seats.map((s) => s.player?.name));
-    const free = BOT_LIST.filter((n) => !used.has(n));
-    const name = free.length ? free[randomBytes(2).readUInt16BE(0) % free.length] : `Bot${randomBytes(2).toString('hex')}`;
+    const pick = (names: string[]) => { const free = names.filter((n) => !used.has(n)); return free.length ? free[randomBytes(2).readUInt16BE(0) % free.length] : undefined; };
+    const name = (group && BOT_GROUPS[group] ? pick(BOT_GROUPS[group]) : undefined) ?? pick(Object.values(BOT_GROUPS).flat()) ?? `Bot${randomBytes(2).toString('hex')}`;
     return this.join(name, undefined, 'bot', persona, seatIdx);
   }
   resolve(token: string): SeatToken | undefined {
@@ -192,13 +193,17 @@ export class GameRuntime {
   /** Fill empty seats with bots up to config.autoFillTo players. */
   autoFill() {
     const cfg = this.table.config;
-    let players = this.table.seats.filter((s) => s.player).length;
-    let i = 0;
-    while (players < cfg.autoFillTo && players < cfg.maxSeats) {
-      const persona = cfg.botPersonas[i++ % cfg.botPersonas.length] ?? 'weak';
-      this.addBot(persona, this.randomEmptySeat());
-      players++;
-    }
+    const players = this.table.seats.filter((s) => s.player).length;
+    const n = Math.max(0, Math.min(cfg.autoFillTo, cfg.maxSeats) - players);
+    // every group gets at least one agent (as far as seats allow), the rest are random groups
+    const groups = Object.keys(BOT_GROUPS).sort(() => Math.random() - 0.5);
+    const plan = [...groups.slice(0, n)];
+    while (plan.length < n) plan.push(groups[Math.floor(Math.random() * groups.length)]);
+    plan.sort(() => Math.random() - 0.5);
+    plan.forEach((group, i) => {
+      const persona = cfg.botPersonas[i % cfg.botPersonas.length] ?? 'weak';
+      this.addBot(persona, this.randomEmptySeat(), group);
+    });
   }
 
   // ----- actions -----
