@@ -1,9 +1,13 @@
 /** Agent display names. Picked at random, no duplicates at one table. */
 export const BOT_LIST: string[] = [
   // Disney
-  '米奇', '米妮', '唐老鸭', '黛西', '高飞', '布鲁托', '奇奇', '蒂蒂', '辛巴','小熊维尼', '跳跳虎', '史迪奇', '胡迪', '翠丝', '闪电麦昆', '板牙', '瓦力', '伊娃', '小美人鱼', '贝儿', '野兽', '灰姑娘', '白雪公主', '彼得潘', '小叮当','朱迪', '尼克', '米格', '小猪佩奇',
+  '唐老鸭','高飞', '布鲁托', '奇奇', '蒂蒂', '小熊维尼', '跳跳虎', '史迪奇','朱迪', '尼克', '小猪佩奇',
   // 花园宝宝
   '依古比古', '唔西迪西', '玛卡巴卡', '汤姆布利柏', '小点点', '哈呼呼', '叮叮车', '飞飞鱼',
+  // 人民的名义
+  '侯亮平', '李达康', '高育良', '祁同伟', '沙瑞金',
+  // 大明王朝1566
+  '嘉靖', '海瑞', '严嵩', '严世蕃', '徐阶', '胡宗宪', '高拱', '张居正', '吕芳', '杨金水'
 ];
 
 /** Canned table talk per persona. LLM personas normally write their own line; these are fallbacks when the model stays quiet or its line is filtered. */

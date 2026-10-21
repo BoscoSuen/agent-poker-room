@@ -164,6 +164,26 @@ export class GameRuntime {
     this.table.leaveSeat(seatIdx);
     queueMicrotask(() => this.notify());
   }
+  /** Host: reshuffle seats before the next hand (immediately if no hand is running). */
+  pendingShuffle = false;
+  requestShuffle(): { pending: boolean } {
+    if (this.table.hand && !this.table.handDone) { this.pendingShuffle = true; this.say('系统', null, '下一手开始前重新分配座位。'); return { pending: true }; }
+    this.applyShuffle();
+    return { pending: false };
+  }
+  private applyShuffle() {
+    this.pendingShuffle = false;
+    const moves = this.table.shuffleSeats();
+    const map = new Map(moves);
+    for (const st of this.tokens.values()) { const to = map.get(st.seatIdx); if (to !== undefined) st.seatIdx = to; }
+    this.say('系统', null, '座位已重新分配。');
+    queueMicrotask(() => this.notify());
+  }
+  private randomEmptySeat(): number | undefined {
+    const free = this.table.seats.filter((s) => !s.player).map((s) => s.idx);
+    return free.length ? free[randomBytes(2).readUInt16BE(0) % free.length] : undefined;
+  }
+
   /** Fill empty seats with bots up to config.autoFillTo players. */
   autoFill() {
     const cfg = this.table.config;
@@ -171,7 +191,7 @@ export class GameRuntime {
     let i = 0;
     while (players < cfg.autoFillTo && players < cfg.maxSeats) {
       const persona = cfg.botPersonas[i++ % cfg.botPersonas.length] ?? 'weak';
-      this.addBot(persona);
+      this.addBot(persona, this.randomEmptySeat());
       players++;
     }
   }
@@ -272,6 +292,7 @@ export class GameRuntime {
       this.nextHandTimer = null;
       if (this.closed || !this.table.state.running) return;
       this.table.clearHand();
+      if (this.pendingShuffle) { try { this.applyShuffle(); } catch (e) { log('runtime', 'shuffle failed', { e: String(e) }); } }
       if (this.table.canStartHand()) {
         try { this.table.startHand(); } catch (e) { log('runtime', 'startHand failed', { e: String(e) }); }
       } else {

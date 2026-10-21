@@ -133,6 +133,7 @@ export type TableEvent =
   | { type: 'pot_awarded'; seat: number; amount: number; potIndex: number; hand?: string }
   | { type: 'hand_ended'; no: number; nonce: string; deck: Card[] }
   | { type: 'status'; status: TableStatus; running: boolean }
+  | { type: 'seats_shuffled'; moves: [number, number][] }   // [from, to]
   | { type: 'chat'; from: string; seat: number | null; text: string; channel: 'table' | 'commentary' };
 
 export interface LegalAction {

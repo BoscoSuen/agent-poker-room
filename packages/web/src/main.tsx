@@ -3,6 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import './styles.css';
 import { Home } from './pages/Home';
 import { Game } from './pages/Game';
+import { loadSettings, applySettings } from './components/Table';
 
 function usePath() {
   const [path, setPath] = useState(location.pathname);
@@ -22,6 +23,7 @@ function App() {
   return <Home />;
 }
 render(<App />, document.getElementById('app')!);
+applySettings(loadSettings());
 
 if ('serviceWorker' in navigator && location.hostname !== 'localhost') {
   window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });

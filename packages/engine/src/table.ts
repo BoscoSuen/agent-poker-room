@@ -142,6 +142,21 @@ export class Table {
     seat.stack += Math.floor(amount);
   }
 
+  /** Randomly reassign every seated player to a seat (between hands only). Button is re-drawn. Returns [from, to] moves. */
+  shuffleSeats(): [number, number][] {
+    if (this.hand && !this.handDone) throw new EngineError('hand_in_progress', 'cannot shuffle during a hand');
+    this.clearHand();
+    const occupied = this.seats.filter((s) => s.player);
+    const targets = shuffle(this.seats.map((s) => s.idx), this.rng).slice(0, occupied.length);
+    const next = this.seats.map((s) => emptySeat(s.idx));
+    const moves: [number, number][] = [];
+    occupied.forEach((s, i) => { const to = targets[i]; Object.assign(next[to], s, { idx: to }); moves.push([s.idx, to]); });
+    this.state.seats = next;
+    this.state.dealerSeat = null;
+    this.emit({ type: 'seats_shuffled', moves });
+    return moves;
+  }
+
   setRunning(running: boolean) {
     this.state.running = running;
     if (!running && !this.hand) this.state.status = 'waiting';
@@ -501,6 +516,11 @@ export class Table {
     hand.pots = pots;
     const total = pots.reduce((a, p) => a + p.amount, 0);
     winner.stack += total;
+    // agents always show their cards when they win, even uncontested; humans keep theirs hidden
+    if (winner.player?.kind === 'bot') {
+      winner.showCards = true;
+      this.emit({ type: 'showdown', seat: winner.idx, cards: [...winner.holeCards], hand: 'uncontested' });
+    }
     hand.results = [{ potIndex: 0, amount: total, winners: [{ seat: winner.idx, amount: total }] }];
     this.emit({ type: 'pot_awarded', seat: winner.idx, amount: total, potIndex: 0 });
     this.endHand();

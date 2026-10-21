@@ -37,6 +37,7 @@ function serve(c: Client) {
   (c.ws as any)._client = c;
   const send = (obj: unknown) => { if (c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify(obj)); };
   const push = () => {
+    if (c.token) { const st = c.rt.resolve(c.token); c.seatIdx = st ? st.seatIdx : null; }
     const view = c.rt.view(c.seatIdx);
     const payload = { type: 'view', view, chat: c.rt.recentChat(30), leaderboard: c.rt.leaderboardRows() };
     const s = JSON.stringify(payload);

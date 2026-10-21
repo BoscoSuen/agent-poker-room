@@ -83,6 +83,7 @@ host.post('/add_bot', async (c) => {
   try { const st = g.rt.addBot(persona, body.seat !== undefined ? Number(body.seat) : undefined); return c.json({ seat: st.seatIdx }); }
   catch (e: any) { return c.json({ error: e.code ?? 'error', message: e.message }, 400); }
 });
+host.post('/shuffle', (c) => { const g = games.get(c.req.param('id')!)!; try { return c.json({ ok: true, ...g.rt.requestShuffle() }); } catch (e: any) { return c.json({ error: e.code ?? 'error', message: e.message }, 400); } });
 host.post('/kick', async (c) => {
   const g = games.get(c.req.param('id')!)!;
   const body = await c.req.json().catch(() => ({}));

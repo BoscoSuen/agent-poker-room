@@ -82,7 +82,7 @@ describe('Table betting', () => {
     expect(t.handDone).toBe(true);
   });
 
-  it('uncontested pot goes to last player, no cards shown', () => {
+  it('uncontested pot goes to last player; humans do not show, agents do', () => {
     const t = mk(3);
     t.startHand();
     a(t, 'fold'); a(t, 'fold');
@@ -91,6 +91,11 @@ describe('Table betting', () => {
     const v = viewFor(t, 0);
     expect(v.seats[2].holeCards).toBeNull();
     expect(v.seats[1].holeCards).toBeNull();
+    const t2 = new Table({ smallBlind: 10, bigBlind: 20 }, { rng: () => 0 });
+    t2.takeSeat(p(0), 1000, 0); t2.takeSeat(p(1), 1000, 1); t2.takeSeat(p(2, 'bot'), 1000, 2);
+    t2.startHand();
+    t2.act(0, 'fold'); t2.act(1, 'fold');
+    expect(viewFor(t2, 0).seats[2].holeCards).toHaveLength(2);
   });
 
   it('side pots: three-way all-in with different stacks', () => {
@@ -239,5 +244,23 @@ describe('no decision timer', () => {
     expect(t.hand!.deadline).toBeNull();
     expect(t.tick(Date.now() + 10 * 60 * 60 * 1000)).toBe(false);
     expect(t.hand!.actionOn).not.toBeNull();
+  });
+});
+
+describe('shuffle seats', () => {
+  it('moves every player to a new random seat, keeps stacks, refuses mid-hand', () => {
+    const t = new Table({ smallBlind: 10, bigBlind: 20 });
+    for (let i = 0; i < 5; i++) t.takeSeat(p(i), 1000 + i, i);
+    t.startHand();
+    expect(() => t.shuffleSeats()).toThrow(/during a hand/);
+    while (!t.handDone) { const s = t.hand!.actionOn!; t.act(s, t.legalActions(s).some((l) => l.action === 'check') ? 'check' : 'fold'); }
+    const before = new Map(t.seats.filter((s) => s.player).map((s) => [s.player!.id, s.stack]));
+    const moves = t.shuffleSeats();
+    expect(moves).toHaveLength(5);
+    const after = t.seats.filter((s) => s.player);
+    expect(after).toHaveLength(5);
+    for (const s of after) { expect(before.get(s.player!.id)).toBe(s.stack); expect(t.seats[s.idx]).toBe(s); }
+    expect(t.hand).toBeNull();
+    t.startHand(); // still playable
   });
 });

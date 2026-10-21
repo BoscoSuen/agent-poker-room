@@ -43,7 +43,7 @@ export interface HandView {
 }
 
 export interface View {
-  table: { id: string; name: string; smallBlind: number; bigBlind: number; ante: number; status: TableStatus; running: boolean; handNo: number; decisionMs: number; maxSeats: number; autoFillTo: number };
+  table: { id: string; name: string; smallBlind: number; bigBlind: number; ante: number; status: TableStatus; running: boolean; handNo: number; decisionMs: number; maxSeats: number; autoFillTo: number; defaultStack: number };
   you: number | null;
   seats: SeatView[];
   hand: HandView | null;
@@ -92,7 +92,7 @@ export function viewFor(table: Table, seatIdx: number | null, now = Date.now()):
   return {
     table: {
       id: st.id, name: st.config.name, smallBlind: st.config.smallBlind, bigBlind: st.config.bigBlind, ante: st.config.ante,
-      status: st.status, running: st.running, handNo: st.handNo, decisionMs: st.config.decisionMs, maxSeats: st.config.maxSeats, autoFillTo: st.config.autoFillTo,
+      status: st.status, running: st.running, handNo: st.handNo, decisionMs: st.config.decisionMs, maxSeats: st.config.maxSeats, autoFillTo: st.config.autoFillTo, defaultStack: st.config.defaultStack,
     },
     you: seatIdx,
     seats,

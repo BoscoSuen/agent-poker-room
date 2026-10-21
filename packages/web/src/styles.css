@@ -82,12 +82,16 @@ label { display: block; font-size: 12px; color: var(--fg2); margin-bottom: 4px; 
 .seat .timer { position: absolute; left: 6px; right: 6px; bottom: 2px; height: 3px; background: #333a46; border-radius: 2px; overflow: hidden; }
 .seat .timer i { display: block; height: 100%; background: var(--gold); transform-origin: left; }
 .seat .timer.bank i { background: var(--red); }
-.chip { position: absolute; transform: translate(-50%, -50%); z-index: 2; font-family: var(--mono); font-size: 12px; background: rgba(0,0,0,.55); color: #fff; padding: 2px 7px; border-radius: 999px; border: 1px solid rgba(255,255,255,.15); white-space: nowrap; }
+.chip { position: absolute; transform: translate(-50%, -50%); z-index: 2; font-family: var(--mono); font-size: 15px; font-weight: 600; background: rgba(0,0,0,.55); color: #fff; padding: 3px 9px; border-radius: 999px; border: 1px solid rgba(255,255,255,.15); white-space: nowrap; }
 .dbtn { position: absolute; transform: translate(-50%, -50%); z-index: 2; width: 20px; height: 20px; border-radius: 50%; background: #fff; color: #000; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,.5); }
 .seat .persona { font-size: 9px; color: #9fc3ad; text-transform: uppercase; letter-spacing: .05em; }
 .seat .empty { width: 100%; padding: 10px 4px; border: 1px dashed rgba(255,255,255,.3); border-radius: 10px; color: rgba(255,255,255,.6); font-size: 12px; background: rgba(0,0,0,.15); }
 .seat .empty:hover { border-color: var(--gold); color: var(--gold); }
 .seat .dc { color: #ffb3b0; }
+.dseat { position: absolute; top: 50%; width: 20px; height: 20px; margin-top: -10px; border-radius: 50%; background: #fff; color: #000; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 4px rgba(0,0,0,.5); z-index: 3; }
+.dseat.r { right: -24px; } .dseat.l { left: -24px; }
+.seat .busted { display: flex; gap: 4px; justify-content: center; margin-top: 4px; }
+.seat .busted button { padding: 2px 8px; font-size: 10px; border-radius: 6px; }
 .seat.win .plate { border-color: var(--gold); animation: winglow 1.2s ease-in-out infinite alternate; }
 @keyframes winglow { from { box-shadow: 0 0 0 2px var(--gold), 0 0 12px rgba(232,194,106,.35); } to { box-shadow: 0 0 0 3px var(--gold), 0 0 28px rgba(232,194,106,.85); } }
 .winbadge { position: absolute; bottom: 100%; left: 50%; transform: translate(-50%, -6px); background: linear-gradient(180deg, #f3d98a, var(--gold)); color: #1a1407; font-weight: 800; font-size: 13px; padding: 5px 10px; border-radius: 999px; white-space: nowrap; z-index: 6; box-shadow: 0 6px 18px rgba(0,0,0,.5), 0 0 0 2px rgba(255,255,255,.25) inset; animation: winpop .35s cubic-bezier(.2,1.4,.4,1); font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -133,6 +137,9 @@ label { display: block; font-size: 12px; color: var(--fg2); margin-bottom: 4px; 
 .chat .msg.commentary b { color: #9fc3ad; }
 .chat form { display: flex; gap: 6px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
 .host .sec { margin-bottom: 14px; }
+.host .sechead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.host .sechead h4 { margin: 0; }
+.host .sechead button { padding: 4px 12px; font-size: 12px; }
 .host .sec h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--fg2); }
 .host .seatrow { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px dotted var(--line); font-size: 12px; }
 .invite { display: flex; gap: 6px; } .invite input { font-family: var(--mono); font-size: 12px; }
@@ -229,7 +236,7 @@ label { display: block; font-size: 12px; color: var(--fg2); margin-bottom: 4px; 
   .seat .stack { font-size: 12px; } .posi { display: inline; } .posn { display: none; }
   .seat .sub { font-size: 9px; min-height: 10px; }
   .seat .ptag { width: 8px; height: 8px; padding: 0; border-radius: 50%; overflow: hidden; color: transparent; vertical-align: middle; margin-left: 4px; background: #9fc3ff; }
-  .chip { font-size: 11px; padding: 1px 5px; } .chip .chips { width: 14px; height: 16px; margin-right: 3px; } .chip .chips i { width: 14px; height: 6px; }
+  .chip { font-size: 14px; padding: 2px 7px; } .chip .chips { width: 14px; height: 16px; margin-right: 3px; } .chip .chips i { width: 14px; height: 6px; }
   .dbtn { width: 16px; height: 16px; font-size: 9px; }
   .bubble { font-size: 11px; max-width: 130px; }
   .winbadge { font-size: 11px; padding: 4px 8px; }

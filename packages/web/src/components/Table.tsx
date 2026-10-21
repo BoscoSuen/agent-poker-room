@@ -10,7 +10,7 @@ const N = 9;
 const PERSONA_INFO: Record<string, { label: string; desc: string }> = {
   default: { label: 'Default', desc: 'Solid tight-aggressive: opens good hands, respects position, value bets, bluffs selectively.' },
   aggressive: { label: 'Aggressive', desc: 'Loose-aggressive: wide opens, frequent 3-bets and barrels, big sizes, extra random bluffs.' },
-  weak: { label: 'Weak', desc: 'Rule-based calling station: calls almost anything, rarely raises, no LLM.' },
+  weak: { label: 'Weak', desc: 'Recreational "fish": sees every flop, chases every draw, calls down with any pair, odd bet sizes, tilts after losing.' },
   gto: { label: 'GTO pro', desc: 'PokerSkill strategy prompts (heads-up approximation) plus the LLM; balanced, solver-style play.' },
 };
 
@@ -57,7 +57,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
   const [bbMode, setBbMode] = useState(false);
   const [join, setJoin] = useState<{ seat?: number } | null>(null);
   const [detail, setDetail] = useState<number | null>(null);
-  const [tab, setTab] = useState<'log' | 'chat' | 'board' | 'host'>(hostKey ? 'host' : 'log');
+  const [tab, setTab] = useState<'log' | 'chat' | 'board' | 'host' | 'settings'>(hostKey ? 'host' : 'log');
   const [collapsed, setCollapsed] = useState(true);
   const seenChat = useRef(0);
   useEffect(() => { if (!collapsed || tab === 'chat') seenChat.current = es.chat.length; }, [collapsed, es.chat.length, tab]);
@@ -164,7 +164,12 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
                     <div class="stack">{s.stack === 0 && s.inHand ? 'ALL-IN' : fmt(s.stack)}{pos[s.idx] ? <span class="posi"> · {pos[s.idx]}</span> : null}</div>
                     {pos[s.idx] ? <div class="posn">({pos[s.idx]})</div> : null}
                     <div class="sub">{!s.connected && s.kind === 'human' ? <span class="dc">disconnected</span> : s.sittingOut ? 'sitting out' : winners.has(s.idx) && h?.done ? <span class="ok">+{fmt(winAmount(s.idx))}</span> : s.lastAction ? s.lastAction.replace(/(\d+)$/, (m) => fmt(Number(m))) : ''}</div>
+                    {mobile && s.isDealer ? <div class={`dseat ${p.x <= 50 ? 'r' : 'l'}`}>D</div> : null}
                     {acting ? <div class={`timer ${bank ? 'bank' : ''}`}><i style={{ transform: `scaleX(${frac})` }} /></div> : null}
+                    {hostKey && s.kind === 'bot' && s.stack === 0 && !(h && s.inHand && !h.done) ? <div class="busted" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => hostCall(api, gameId, hostKey, 'add_chips', { seat: s.idx, amount: v.table.defaultStack }).catch(() => {})}>Load</button>
+                      <button class="danger" onClick={() => hostCall(api, gameId, hostKey, 'kick', { seat: s.idx }).catch(() => {})}>Kick</button>
+                    </div> : null}
                   </div>
                 </div>
               );
@@ -182,7 +187,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
                   const st = sliding ? { '--dx': `${((p.x - bp.x) / 100) * fw}px`, '--dy': `${((p.y - bp.y) / 100) * fh}px` } as any : {};
                   return <div class={`chip ${sliding ? 'slide' : ''}`} key={sliding ? flash!.key : 'chip'} style={{ left: `${bp.x}%`, top: `${bp.y}%`, ...st }}><Chips amount={s.streetBet} bb={v.table.bigBlind} />{fmt(s.streetBet)}</div>;
                 })() : null}
-                {s.isDealer ? <div class="dbtn" style={{ left: `${dp.x}%`, top: `${dp.y}%` }}>D</div> : null}
+                {s.isDealer && !mobile ? <div class="dbtn" style={{ left: `${dp.x}%`, top: `${dp.y}%` }}>D</div> : null}
               </>);
             })}
           </div>
@@ -207,7 +212,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
             <button onClick={() => setDetail(null)}>Close</button></div>
         </div></div>;
       })() : null}
-      {join ? <JoinModal seat={join.seat} defaultStack={(v.table as any).defaultStack ?? v.table.bigBlind * 100} onClose={() => setJoin(null)} onJoin={doJoin} /> : null}
+      {join ? <JoinModal seat={join.seat} defaultStack={v.table.defaultStack} onClose={() => setJoin(null)} onJoin={doJoin} /> : null}
     </div>
   );
 }
@@ -302,7 +307,7 @@ function ActionBar({ v, client, fmt, you, onSit, onBb, onLeave }: { v: View; cli
   );
 }
 
-function SidePanel({ tab, setTab, collapsed, onClose, v, es, client, hostKey, gameId, api, fmt }: { tab: 'log' | 'chat' | 'board' | 'host'; setTab: (t: any) => void; collapsed: boolean; onClose: () => void; v: View; es: EngineState; client: EngineClient; hostKey: string | null; gameId: string; api: string; fmt: (n: number) => string }) {
+function SidePanel({ tab, setTab, collapsed, onClose, v, es, client, hostKey, gameId, api, fmt }: { tab: 'log' | 'chat' | 'board' | 'host' | 'settings'; setTab: (t: any) => void; collapsed: boolean; onClose: () => void; v: View; es: EngineState; client: EngineClient; hostKey: string | null; gameId: string; api: string; fmt: (n: number) => string }) {
   // keep a rolling log across hands
   const logRef = useRef<{ hand: number; lines: { t: string; cls?: string }[] }[]>([]);
   const h = v.hand;
@@ -357,6 +362,7 @@ function SidePanel({ tab, setTab, collapsed, onClose, v, es, client, hostKey, ga
         <button class={tab === 'chat' ? 'on' : ''} onClick={() => setTab('chat')}>Chat {es.chat.length ? `(${es.chat.length})` : ''}</button>
         <button class={tab === 'board' ? 'on' : ''} onClick={() => setTab('board')}>Board</button>
         {hostKey ? <button class={tab === 'host' ? 'on' : ''} onClick={() => setTab('host')}>Host</button> : null}
+        <button class={tab === 'settings' ? 'on' : ''} onClick={() => setTab('settings')} title="Settings">⚙</button>
         <button class="sheet-close" onClick={onClose} aria-label="Close panel">✕</button>
       </div>
       {tab === 'log' ? <div class="body log" ref={bodyRef}>
@@ -374,13 +380,14 @@ function SidePanel({ tab, setTab, collapsed, onClose, v, es, client, hostKey, ga
         </tbody></table>
         <p class="muted" style="font-size:11px">Net = chips now − chips bought in; Wins = hands won; Sits = times seated. Per name, across seatings. ● currently seated.</p>
       </div> : null}
+      {tab === 'settings' ? <SettingsPanel /> : null}
       {tab === 'host' && hostKey ? <HostPanel v={v} hostKey={hostKey} gameId={gameId} api={api} /> : null}
     </div>
   );
 }
 
 function HostPanel({ v, hostKey, gameId, api }: { v: View; hostKey: string; gameId: string; api: string }) {
-  const [persona, setPersona] = useState('default'); const [err, setErr] = useState(''); const [copied, setCopied] = useState(false);
+  const [persona, setPersona] = useState('default'); const [err, setErr] = useState(''); const [copied, setCopied] = useState(false); const [shuffleMsg, setShuffleMsg] = useState('');
   const call = async (cmd: string, body?: any) => { setErr(''); try { await hostCall(api, gameId, hostKey, cmd, body); } catch (e: any) { setErr(e.message); } };
   const invite = `${location.origin}/g/${gameId}`;
   const copy = async () => { try { await navigator.clipboard.writeText(invite); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } };
@@ -398,10 +405,37 @@ function HostPanel({ v, hostKey, gameId, api }: { v: View; hostKey: string; game
         </select>
         <button onClick={() => call('add_bot', { persona })}>Add</button>
       </div></div>
-      <div class="sec"><h4>Seats</h4>
+      <div class="sec"><div class="sechead"><h4>Seats</h4><button onClick={async () => { setErr(''); try { const r = await hostCall(api, gameId, hostKey, 'shuffle'); setShuffleMsg(r.pending ? 'Seats will be reshuffled before the next hand.' : 'Seats reshuffled.'); setTimeout(() => setShuffleMsg(''), 4000); } catch (e: any) { setErr(e.message); } }}>Shuffle</button></div>
+        {shuffleMsg ? <div class="muted" style="font-size:12px;margin-bottom:6px">{shuffleMsg}</div> : null}
         {v.seats.filter((s) => s.name).map((s) => <div class="seatrow"><span>{s.idx + 1}. {s.name}{s.persona ? <span class={`ptag p-${s.persona}`} title={s.persona}>{s.persona}</span> : null} <span class="muted mono">{s.stack}</span></span><span class="row" style="gap:4px"><button style="padding:2px 6px;font-size:11px" onClick={() => call('add_chips', { seat: s.idx, amount: v.table.bigBlind * 100 })}>+{v.table.bigBlind * 100}</button><button style="padding:2px 6px;font-size:11px" class="danger" onClick={() => call('kick', { seat: s.idx })}>kick</button></span></div>)}
       </div>
       {err ? <div class="err">{err}</div> : null}
+    </div>
+  );
+}
+
+// ---- settings (per device, localStorage) ----
+export const SETTINGS_KEY = 'pg:settings';
+export interface Settings { size: 'S' | 'M' | 'L' | 'XL'; font: 'sans' | 'serif' | 'mono' }
+const SIZES: Record<Settings['size'], number> = { S: 0.9, M: 1, L: 1.12, XL: 1.25 };
+const FONTS: Record<Settings['font'], string> = {
+  sans: '"Instrument Sans", "Archivo", system-ui, -apple-system, sans-serif',
+  serif: '"Iowan Old Style", "Palatino", Georgia, "Noto Serif SC", serif',
+  mono: '"JetBrains Mono", ui-monospace, Menlo, monospace',
+};
+export function loadSettings(): Settings { try { return { size: 'M', font: 'sans', ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; } catch { return { size: 'M', font: 'sans' }; } }
+export function applySettings(st: Settings) {
+  const root = document.documentElement;
+  root.style.setProperty('--font', FONTS.sans);
+  (document.getElementById('app') as HTMLElement | null)?.style.setProperty('zoom', String(SIZES[st.size]));
+}
+function SettingsPanel() {
+  const [st, setSt] = useState<Settings>(loadSettings());
+  const update = (p: Partial<Settings>) => { const n = { ...st, ...p }; setSt(n); try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(n)); } catch { /* ignore */ } applySettings(n); };
+  return (
+    <div class="body host">
+      <div class="sec"><h4>Text size</h4><div class="personas">{(['S', 'M', 'L', 'XL'] as const).map((k) => <button class={st.size === k ? 'on' : ''} onClick={() => update({ size: k })}>{k}</button>)}</div></div>
+      <p class="muted" style="font-size:12px">Saved on this device only.</p>
     </div>
   );
 }
