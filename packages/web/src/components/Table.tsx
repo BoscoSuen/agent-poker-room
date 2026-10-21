@@ -8,10 +8,10 @@ type Props = { client: EngineClient; es: EngineState; hostKey: string | null; ga
 const N = 9;
 
 const PERSONA_INFO: Record<string, { label: string; desc: string }> = {
-  default: { label: 'Default', desc: 'Solid tight-aggressive: opens good hands, respects position, value bets, bluffs selectively.' },
-  aggressive: { label: 'Aggressive', desc: 'Loose-aggressive: wide opens, frequent 3-bets and barrels, big sizes, extra random bluffs.' },
-  weak: { label: 'Weak', desc: 'Recreational "fish": sees every flop, chases every draw, calls down with any pair, odd bet sizes, tilts after losing.' },
-  gto: { label: 'GTO pro', desc: 'PokerSkill strategy prompts (heads-up approximation) plus the LLM; balanced, solver-style play.' },
+  default: { label: 'Default', desc: 'Default strategy plus LLM.' },
+  aggressive: { label: 'Aggressive', desc: 'Loose-aggressive: wide opens.' },
+  weak: { label: 'Weak', desc: 'Recreational "fish": weak play without too much thinking.' },
+  gto: { label: 'GTO pro', desc: 'PokerSkill strategy plus the LLM; balanced, solver-style play.' },
 };
 
 /** Chip stack: discs colored by denomination (relative to the big blind), count grows with amount. */
