@@ -76,7 +76,7 @@ function Login({ onLogin }: { onLogin: (e: string) => void }) {
 
 function Host({ email }: { email: string }) {
   const [games, setGames] = useState<GameInfo[]>([]);
-  const [cfg, setCfg] = useState({ name: `${email.split('@')[0]}'s table`, smallBlind: 10, bigBlind: 20, defaultStack: 2000, timerEnabled: true, hintsEnabled: false, decisionSec: 20, timeBankSec: 30, autoFillTo: 7, showdownSec: 5, botPersonas: ['default', 'aggressive', 'weak', 'gto'] as string[] });
+  const [cfg, setCfg] = useState({ name: `${email.split('@')[0]}'s table`, smallBlind: 10, bigBlind: 20, defaultStack: 2000, timerEnabled: false, hintsEnabled: true, decisionSec: 20, timeBankSec: 30, autoFillTo: 7, showdownSec: 5, botPersonas: ['default', 'aggressive', 'weak', 'gto'] as string[] });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const refresh = () => api.myGames().then(setGames).catch(() => {});
