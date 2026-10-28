@@ -102,6 +102,10 @@ label { display: block; font-size: 12px; color: var(--fg2); margin-bottom: 4px; 
 .cardf.dim { opacity: .45; }
 
 /* cards */
+.board .cardf.deal { animation: dealin .5s cubic-bezier(.2,.8,.3,1) backwards; }
+.seat .cards .cardf { animation: dealin .4s cubic-bezier(.2,.8,.3,1) backwards; }
+.seat .cards .cardf:nth-child(2) { animation-delay: .12s; }
+@keyframes dealin { 0% { transform: translate(-40px, -30px) rotateY(90deg) scale(.6); opacity: 0; } 55% { opacity: 1; } 100% { transform: none; } }
 .cardf { width: 34px; height: 48px; border-radius: 5px; background: var(--card-bg); color: #000; display: flex; flex-direction: column; justify-content: space-between; padding: 2px 3px; font-weight: 700; font-size: 13px; line-height: 1; box-shadow: 0 2px 4px rgba(0,0,0,.4); font-family: var(--mono); }
 .cardf.big { width: 44px; height: 62px; font-size: 17px; padding: 4px 5px; }
 .cardf .s { font-size: 15px; align-self: flex-end; }

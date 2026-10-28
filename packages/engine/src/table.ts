@@ -115,7 +115,7 @@ export class Table {
     this.emit({ type: 'action', seat: seat.idx, action: 'fold', amount: 0, to: seat.streetBet, allIn: false });
     const live = this.livePlayers();
     if (live.length === 1) { this.endHandUncontested(live[0]); return; }
-    if (hand.actionOn === null && hand.needAction.length === 0) this.finishStreet();
+    if (hand.actionOn === null && hand.needAction.length === 0 && hand.dealAt === null) this.finishStreet();
   }
   private removeSeat(seat: Seat) {
     const player = seat.player!;
@@ -213,7 +213,7 @@ export class Table {
     const hand: Hand = {
       no, deckCommit: commitDeck(deck, nonce), nonce, deck, board: [], street: 'preflop', dealer, sb, bb,
       actionOn: null, currentBet: 0, minRaise: this.config.bigBlind, raiseId: 0, needAction: [], lastAggressor: null,
-      decisionId: '', deadline: null, usingTimeBank: false, history: [], pots: null, results: null, deadMoney: 0,
+      decisionId: '', deadline: null, dealAt: null, usingTimeBank: false, history: [], pots: null, results: null, deadMoney: 0,
       startedAt: this.now(), endedAt: null,
     };
     this.state.hand = hand;
@@ -384,7 +384,13 @@ export class Table {
   /** Enforce the decision deadline. Returns true if an auto action was taken. */
   tick(now = this.now()): boolean {
     const hand = this.hand;
-    if (!hand || hand.actionOn === null || hand.deadline === null || now < hand.deadline) return false;
+    if (!hand) return false;
+    if (hand.dealAt !== null && !this.handDone) {
+      if (now < hand.dealAt) return false;
+      this.finishStreet();
+      return true;
+    }
+    if (hand.actionOn === null || hand.deadline === null || now < hand.deadline) return false;
     const seat = this.seats[hand.actionOn];
     if (!hand.usingTimeBank && seat.timeBankMs > 0) {
       hand.usingTimeBank = true;
@@ -416,6 +422,9 @@ export class Table {
   private finishStreet() {
     const hand = this.hand!;
     hand.actionOn = null; hand.deadline = null;
+    // pacing: wait streetDelayMs before dealing (or showing down); tick() calls back in
+    if (this.config.streetDelayMs > 0 && hand.dealAt === null) { hand.dealAt = this.now() + this.config.streetDelayMs; return; }
+    hand.dealAt = null;
     const idx = STREETS.indexOf(hand.street);
     const next = STREETS[idx + 1];
     if (next === 'showdown') { this.showdown(); return; }

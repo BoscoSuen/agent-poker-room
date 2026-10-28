@@ -316,8 +316,10 @@ export class GameRuntime {
   private armTimer() {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     const h = this.table.hand;
-    if (!h || h.deadline === null || this.closed) return;
-    const wait = Math.max(0, h.deadline - Date.now()) + 5;
+    if (!h || this.closed) return;
+    const at = [h.deadline, h.dealAt].filter((x): x is number => x !== null);
+    if (!at.length) return;
+    const wait = Math.max(0, Math.min(...at) - Date.now()) + 5;
     this.timer = setTimeout(() => {
       this.timer = null;
       try { this.table.tick(Date.now()); } catch (e) { log('runtime', 'tick failed', { e: String(e) }); }
@@ -351,6 +353,7 @@ export function parseTableConfig(input: any): Partial<TableConfig> {
   out.autoFillTo = num(input?.autoFillTo, 7, 2, 9);
   out.maxSeats = num(input?.maxSeats, 9, 2, 9);
   out.showdownMs = num(input?.showdownSec, 5, 1, 30) * 1000;
+  out.streetDelayMs = num(input?.streetDelayMs, 1000, 0, 5000);
   out.hintsEnabled = input?.hintsEnabled === true;
   if (Array.isArray(input?.botPersonas) && input.botPersonas.length) {
     const ok = ['default', 'aggressive', 'weak', 'gto'];

@@ -33,6 +33,7 @@ export interface HandView {
   actionOn: number | null;
   decisionId: string;
   deadline: number | null;
+  dealAt: number | null;
   usingTimeBank: boolean;
   deckCommit: string;
   nonce: string | null;
@@ -86,7 +87,7 @@ export function viewFor(table: Table, seatIdx: number | null, now = Date.now()):
   const handView: HandView | null = hand ? {
     no: hand.no, street: hand.street, board: [...hand.board], pot: table.potTotal + (hand.pots?.reduce((a, p) => a + p.amount, 0) ?? 0) * (done ? 1 : 0),
     currentBet: hand.currentBet, minRaise: hand.minRaise, actionOn: hand.actionOn, decisionId: hand.decisionId,
-    deadline: hand.deadline, usingTimeBank: hand.usingTimeBank, deckCommit: hand.deckCommit,
+    deadline: hand.deadline, dealAt: hand.dealAt, usingTimeBank: hand.usingTimeBank, deckCommit: hand.deckCommit,
     nonce: done ? hand.nonce : null, history: hand.history.map((h) => ({ ...h })), pots: hand.pots, results: hand.results, done,
   } : null;
   return {

@@ -92,6 +92,14 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
     try { const d = await engineHint(api, gameId, client.token!); setHint({ id, data: d }); } catch (e: any) { setHint({ id, err: e.message }); }
   };
   const hintText = (d: Hint) => d.freqs.map((f) => `${f.pct}% ${f.action}`).join(' · ');
+  // board deal-in: each newly dealt community card flips in, staggered within its batch (flop 3, turn 1, river 1)
+  const dealDelay = useRef<{ no: number; delays: Record<string, number> }>({ no: -1, delays: {} });
+  {
+    const no = v.hand?.no ?? -1;
+    if (dealDelay.current.no !== no) dealDelay.current = { no, delays: {} };
+    let k = 0;
+    for (const c of v.hand?.board ?? []) if (dealDelay.current.delays[c] === undefined) dealDelay.current.delays[c] = (k++) * 160;
+  }
   // action flash: latest history entry -> 1.2 s highlight on that seat (chip slide + label)
   const lastAct = v.hand?.history[v.hand.history.length - 1];
   const [flash, setFlash] = useState<{ seat: number; action: string; to: number; key: string } | null>(null);
@@ -156,7 +164,7 @@ export function TableUI({ client, es, hostKey, gameId, api, onToken }: Props) {
           <div class="felt" ref={feltRef}>
             <div class="oval" data-label="Poker Garden" />
             <div class="center">
-              <div class="board">{(h?.board ?? []).map((c) => <Card c={c} big cls={hl(c)} />)}</div>
+              <div class="board">{(h?.board ?? []).map((c) => <Card key={`${h!.no}-${c}`} c={c} big cls={`${hl(c)} deal`} style={{ animationDelay: `${dealDelay.current.delays[c] ?? 0}ms` }} />)}</div>
               {h ? <div class="potwrap">{h.pot > 0 ? <><Chips amount={h.pot} bb={v.table.bigBlind} big /><Chips amount={h.pot / 3} bb={v.table.bigBlind} big /></> : null}<div class="pot"><small>POT</small>{fmt(h.pot)}</div></div> : <div class="handinfo">{v.table.running ? 'next hand starting…' : 'table idle'}</div>}
               {h ? <div class="handinfo">{h.street}{winSummary ? ` · ${winSummary}` : ''}</div> : null}
             </div>

@@ -16,6 +16,7 @@ export interface TableConfig {
   timeBankMs: number;      // extra, one-shot per hand refilled every hand
   autoFillTo: number;      // bots fill empty seats up to this many players (7)
   showdownMs: number;      // pause after hand ends before next hand
+  streetDelayMs: number;   // pause before dealing the next street (0 = deal immediately)
   botPersonas: Persona[];  // personas used when auto-filling (cycled)
   hintsEnabled: boolean;   // players may ask for a GTO hint on their turn
 }
@@ -31,6 +32,7 @@ export const DEFAULT_CONFIG: TableConfig = {
   timeBankMs: 30_000,
   autoFillTo: 7,
   showdownMs: 5_000,
+  streetDelayMs: 0,
   botPersonas: ['default', 'aggressive', 'weak', 'gto'],
   hintsEnabled: false,
 };
@@ -100,6 +102,7 @@ export interface Hand {
   decisionId: string;
   deadline: number | null;
   usingTimeBank: boolean;
+  dealAt: number | null;       // street finished; next street is dealt once now >= dealAt
   history: PlayerAction[];
   pots: Pot[] | null;
   results: PotResult[] | null;

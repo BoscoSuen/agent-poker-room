@@ -141,6 +141,28 @@ describe('Table betting', () => {
     expect(t.seats[first].folded).toBe(true);
   });
 
+  it('streetDelayMs: next street is dealt by tick() after the pause, all-in runouts street by street', () => {
+    let now = 1_000_000;
+    const t = new Table({ decisionMs: 0, streetDelayMs: 1000 }, { rng: () => 0, now: () => now });
+    for (let i = 0; i < 2; i++) t.takeSeat(p(i), 1000, i);
+    t.startHand();
+    t.act(cur(t), 'raise', 1000); // shove
+    t.act(cur(t), 'call');
+    expect(t.hand!.board.length).toBe(0);
+    expect(t.hand!.actionOn).toBeNull();
+    expect(t.hand!.dealAt).toBe(now + 1000);
+    expect(t.tick(now + 999)).toBe(false);
+    expect(t.tick(now + 1000)).toBe(true);
+    expect(t.hand!.board.length).toBe(3);
+    expect(t.hand!.dealAt).toBe(now + 1000); // next pause scheduled from the same clock
+    now += 1000; expect(t.tick(now)).toBe(true); expect(t.hand!.board.length).toBe(4);
+    expect(t.tick(now)).toBe(false);
+    now += 1000; expect(t.tick(now)).toBe(true); expect(t.hand!.board.length).toBe(5);
+    expect(t.handDone).toBe(false);
+    now += 1000; expect(t.tick(now)).toBe(true); expect(t.handDone).toBe(true);
+    expect(t.tick(now + 5000)).toBe(false);
+  });
+
   it('decision id must match', () => {
     const t = mk(3);
     t.startHand();
