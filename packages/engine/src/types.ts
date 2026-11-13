@@ -19,6 +19,7 @@ export interface TableConfig {
   streetDelayMs: number;   // pause before dealing the next street (0 = deal immediately)
   botPersonas: Persona[];  // personas used when auto-filling (cycled)
   hintsEnabled: boolean;   // players may ask for a GTO hint on their turn
+  showPersonas: boolean;   // reveal each agent's persona (default/aggressive/...) to players
 }
 
 export const DEFAULT_CONFIG: TableConfig = {
@@ -35,6 +36,7 @@ export const DEFAULT_CONFIG: TableConfig = {
   streetDelayMs: 0,
   botPersonas: ['default', 'aggressive', 'weak', 'gto'],
   hintsEnabled: false,
+  showPersonas: true,
 };
 
 export interface Player {

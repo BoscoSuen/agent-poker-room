@@ -76,7 +76,7 @@ function Login({ onLogin }: { onLogin: (e: string) => void }) {
 
 function Host({ email }: { email: string }) {
   const [games, setGames] = useState<GameInfo[]>([]);
-  const [cfg, setCfg] = useState({ name: `${email.split('@')[0]}'s table`, smallBlind: 10, bigBlind: 20, defaultStack: 2000, timerEnabled: false, hintsEnabled: true, decisionSec: 20, timeBankSec: 30, autoFillTo: 7, showdownSec: 5, botPersonas: ['default', 'aggressive', 'weak', 'gto'] as string[] });
+  const [cfg, setCfg] = useState({ name: `${email.split('@')[0]}'s table`, smallBlind: 10, bigBlind: 20, defaultStack: 2000, timerEnabled: false, hintsEnabled: true, showPersonas: true, decisionSec: 20, timeBankSec: 30, autoFillTo: 7, showdownSec: 5, botPersonas: ['default', 'aggressive', 'weak', 'gto'] as string[] });
   const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const refresh = () => api.myGames().then(setGames).catch(() => {});
@@ -120,6 +120,9 @@ function Host({ email }: { email: string }) {
           </div>
           <div class="field"><label>GTO hints</label>
             <div class="row" style="gap:8px"><label class="switch"><input type="checkbox" checked={cfg.hintsEnabled} onChange={(e) => set('hintsEnabled', (e.target as HTMLInputElement).checked)} /> {cfg.hintsEnabled ? 'On' : 'Off'}</label></div>
+          </div>
+          <div class="field"><label>Show agent details</label>
+            <div class="row" style="gap:8px"><label class="switch"><input type="checkbox" checked={cfg.showPersonas} onChange={(e) => set('showPersonas', (e.target as HTMLInputElement).checked)} /> {cfg.showPersonas ? 'On' : 'Off (personas hidden)'}</label></div>
           </div>
           <div class="field"><label>Decision time (s)</label><input type="number" min={5} max={600} value={cfg.decisionSec} disabled={!cfg.timerEnabled} onInput={num('decisionSec')} /></div>
           <div class="field"><label>Time bank (s)</label><input type="number" min={0} max={300} value={cfg.timeBankSec} disabled={!cfg.timerEnabled} onInput={num('timeBankSec')} /></div>

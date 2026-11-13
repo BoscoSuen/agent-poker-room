@@ -355,6 +355,7 @@ export function parseTableConfig(input: any): Partial<TableConfig> {
   out.showdownMs = num(input?.showdownSec, 5, 1, 30) * 1000;
   out.streetDelayMs = num(input?.streetDelayMs, 1000, 0, 5000);
   out.hintsEnabled = input?.hintsEnabled === true;
+  out.showPersonas = input?.showPersonas !== false;
   if (Array.isArray(input?.botPersonas) && input.botPersonas.length) {
     const ok = ['default', 'aggressive', 'weak', 'gto'];
     out.botPersonas = input.botPersonas.filter((p: any) => ok.includes(p));

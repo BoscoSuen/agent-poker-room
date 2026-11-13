@@ -66,7 +66,7 @@ export function viewFor(table: Table, seatIdx: number | null, now = Date.now()):
       idx: s.idx,
       name: s.player?.name ?? null,
       kind: s.player?.kind ?? null,
-      persona: s.player?.kind === 'bot' ? s.player.persona : undefined,
+      persona: s.player?.kind === 'bot' && st.config.showPersonas !== false ? s.player.persona : undefined,
       stack: s.stack,
       streetBet: s.streetBet,
       handBet: s.handBet,
