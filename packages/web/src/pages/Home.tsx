@@ -61,13 +61,13 @@ function Login({ onLogin }: { onLogin: (e: string) => void }) {
       <p class="muted" style="font-size:13px">Only hosts need an account (whitelisted emails). Players join by link.</p>
       <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <div class="field"><label>Email</label><input type="email" value={email} onInput={(e) => setEmail((e.target as HTMLInputElement).value)} autocomplete="username" required /></div>
-        <div class="field"><label>Password{mode === 'register' ? ' (min 10 characters)' : ''}</label><input type="password" value={pw} onInput={(e) => setPw((e.target as HTMLInputElement).value)} autocomplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={10} required /></div>
-        {mode === 'register' ? <div class="field"><label>Confirm password</label><input type="password" value={pw2} onInput={(e) => setPw2((e.target as HTMLInputElement).value)} autocomplete="new-password" minLength={10} required style={mismatch ? 'border-color:var(--danger)' : ''} />{mismatch ? <div class="muted" style="color:#ffb3b0;font-size:12px;margin-top:4px">Passwords do not match.</div> : null}</div> : null}
+        <div class="field"><label>Password</label><input type="password" value={pw} onInput={(e) => setPw((e.target as HTMLInputElement).value)} autocomplete={mode === 'login' ? 'current-password' : 'new-password'} required /></div>
+        {mode === 'register' ? <div class="field"><label>Confirm password</label><input type="password" value={pw2} onInput={(e) => setPw2((e.target as HTMLInputElement).value)} autocomplete="new-password" required style={mismatch ? 'border-color:var(--danger)' : ''} />{mismatch ? <div class="muted" style="color:#ffb3b0;font-size:12px;margin-top:4px">Passwords do not match.</div> : null}</div> : null}
         {err ? <div class="err">{err}</div> : null}
         <div class="row">
           {mode === 'login'
             ? <><button class="primary" type="submit" disabled={busy}>Log in</button><button type="button" disabled={busy} onClick={() => { setMode('register'); setErr(''); }}>Register</button></>
-            : <><button class="primary" type="submit" disabled={busy || mismatch || pw.length < 10 || pw2.length === 0}>Create account</button><button type="button" disabled={busy} onClick={() => { setMode('login'); setErr(''); setPw2(''); }}>Back to log in</button></>}
+            : <><button class="primary" type="submit" disabled={busy || mismatch || pw.length === 0 || pw2.length === 0}>Create account</button><button type="button" disabled={busy} onClick={() => { setMode('login'); setErr(''); setPw2(''); }}>Back to log in</button></>}
         </div>
       </form>
     </div>
